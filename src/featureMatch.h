@@ -19,16 +19,16 @@ using namespace cv;
 class PointMatcher
 {
 public:
-	PointMatcher(vector<string> imgNameList, bool extraPoints)
+	PointMatcher(vector<string> imgNameList)
 	{
 		featureDimension = 64;
 		_imgNameList = imgNameList;
 		_imgNum = imgNameList.size();
-		featureExtractor(extraPoints);
+		featureExtractor();
 	};
 
 public:
-	void featureExtractor(bool extraPoints);
+	void featureExtractor();
 	void readfeatures(int imgIndex, vector<Point2d> &keyPts, Mat &descriptors, double ratio);
 	void savefeatures(vector<KeyPoint> keyPts, Mat descriptors, string saveName);
 	void loadImgSizeList();

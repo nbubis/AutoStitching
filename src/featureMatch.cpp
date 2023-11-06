@@ -2,30 +2,20 @@
 #include "opencv2/features2d.hpp"
 #include "opencv2/xfeatures2d.hpp"
 
-void PointMatcher::featureExtractor(bool extraPoints)
+extern std::string Utils::baseDir;
+
+void PointMatcher::featureExtractor()
 {
 	int i, j;
-	if (!extraPoints)
-	{
-		for (i = 0; i < _imgNum; i ++)
-		{
-			int imgIndex = i;
-			char saveName[1024];
-			sprintf(saveName, "/Cache/keyPtfile/keys%d", imgIndex);
-			string saveName_ = Utils::baseDir + string(saveName);
-			_keysFileList.push_back(saveName_);
-		}
-		loadImgSizeList();
-		return;
-	}
 
-    Ptr<cv::xfeatures2d::SURF> detector = cv::xfeatures2d::SURF::create(500);
+    Ptr<cv::xfeatures2d::SURF> detector = cv::xfeatures2d::SURF::create(400);
     
-
 	for (i = 0; i < _imgNum; i ++)
 	{
 		string imgPath = _imgNameList[i];
 		Mat image = imread(imgPath);
+		// cv::resize(image, image, cv::Size(resized_image_width, int(image.rows * resized_image_width / image.cols)));
+
 		Size imgSize(image.cols, image.rows);
 		_imgSizeList.push_back(imgSize);
 
@@ -36,7 +26,7 @@ void PointMatcher::featureExtractor(bool extraPoints)
 
 		int imgIndex = i;
 		char saveName[1024];
-		sprintf(saveName, "/Cache/keyPtfile/keys%d", imgIndex);
+		sprintf(saveName, "/cache/keyPtfile/keys%d", imgIndex);
 		string saveName_ = Utils::baseDir + string(saveName);
 		_keysFileList.push_back(saveName_);
 		savefeatures(keyPts, descriptors, saveName_);
@@ -142,7 +132,7 @@ void PointMatcher::readfeatures(int imgIndex, vector<Point2d> &keyPts, Mat &desc
 
 void PointMatcher::loadImgSizeList()
 {
-	string filePath = Utils::baseDir + "/Cache/imgSizeList.txt";
+	string filePath = Utils::baseDir + "/cache/imgSizeList.txt";
 	FILE *fin = fopen(filePath.c_str(), "r");
 	if (fin == nullptr)
 	{
@@ -161,7 +151,7 @@ void PointMatcher::loadImgSizeList()
 
 void PointMatcher::saveImgSizeList()
 {
-	string savePath = Utils::baseDir + "/Cache/imgSizeList.txt";
+	string savePath = Utils::baseDir + "/cache/imgSizeList.txt";
 	FILE *fout = fopen(savePath.c_str(), "w");
 	for (int i = 0; i < _imgNum; i ++)
 	{
@@ -295,7 +285,7 @@ void PointMatcher::saveMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> po
 		exchanged = true;
 	}
 	char saveName[1024];
-	sprintf(saveName, "/Cache/matchPtfile/match%d_%d.txt", imgIndex1, imgIndex2);
+	sprintf(saveName, "/cache/matchPtfile/match%d_%d.txt", imgIndex1, imgIndex2);
 	string savePath = Utils::baseDir + string(saveName);
 	FILE *fout = fopen(savePath.c_str(), "w");
 	int PtNum = pointSet1.size();
@@ -486,8 +476,8 @@ void PointMatcher::drawMatches(int imgIndex1, int imgIndex2, vector<Point2d> poi
 	sprintf(name1, "match%d_0.jpg", no);
 	sprintf(name2, "match%d_1.jpg", no);
 	no ++;
-	string filePath1 = Utils::baseDir + "/Cache/match_map/" + string(name1);
-	string filePath2 = Utils::baseDir + "/Cache/match_map/" + string(name2);
+	string filePath1 = Utils::baseDir + "/cache/match_map/" + string(name1);
+	string filePath2 = Utils::baseDir + "/cache/match_map/" + string(name2);
 	imwrite(filePath1, image1);
 	imwrite(filePath2, image2);
 }

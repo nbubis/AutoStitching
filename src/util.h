@@ -12,7 +12,11 @@ using namespace cv;
 namespace Utils
 {
 	// ********** global variable list ********** //
-	static string baseDir = "/mnt/disks/nathaniel/AutoStitching/data/";
+	extern string baseDir;
+
+	// inline void setBaseDir(std::string newBaseDir) {
+  	// 	baseDir = newBaseDir;
+	// }
 
 	struct TreeNode
 	{

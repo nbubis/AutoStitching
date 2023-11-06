@@ -288,15 +288,20 @@ void TopoFinder::searchMainChain()
 {
 	//! overlapping probability of image pairs
 	Mat_<double> guidingTable = getGuidingTableP();
-	int iter = 0, maxIter = max(int(_imgNum*0.2), 20);
+	int iter = 0, maxIter = max(int(_imgNum*0.2), 50);
+
+	std::vector <int> image_matches(_imgNum, 0);
+
 	while (1)
 	{
-		cout<<"Searching main chain ... (attempt: "<<++iter<<")"<<endl;
+		cout <<"Searching main chain ... (attempt: " << ++iter << ")" << endl;
 		Mat_<int> imgPairs= Graph::extractMSTree(guidingTable);
 		int pairNo = 0;
+
 		for (pairNo = 0; pairNo < imgPairs.rows; pairNo ++)
 		{
-			int no1 = imgPairs(pairNo,0), no2 = imgPairs(pairNo,1);
+			int no1 = imgPairs(pairNo, 0), no2 = imgPairs(pairNo,1);
+
 			//! avoiding repeating matching which is done in last iteration
 			if (_attempMap(no1,no2) != 0)
 			{
@@ -314,6 +319,9 @@ void TopoFinder::searchMainChain()
 			_matchTime += (et-st);
 			if (yeah)
 			{
+				image_matches[no1] += 1;
+				image_matches[no2] += 1;
+
 				_shotNum ++;
 				_similarityMat(no1,no2) = pointSet1.size();
 				_similarityMat(no2,no1) = pointSet1.size();
@@ -325,21 +333,27 @@ void TopoFinder::searchMainChain()
 				//! matching failed : cost as infinite
 				guidingTable(no1,no2) = 999;
 				guidingTable(no2,no1) = 999;
+
 				if (iter == maxIter)
 				{
-					cout<<"Poor image sequence! exit out."<<endl;
-					exit(0);
+					// cout << image_matches << endl;
+					cout << "Poor image sequence! exit out." << endl;
+					throw std::logic_error("no matches");
 				}
-				cout<<no1<<" Linking "<<no2<<" failed! < built: "<<pairNo+1<<" edges."<<endl;
+				for (auto i: image_matches)
+    				std::cout << i << ' ';
+				cout << no1 <<" Linking "<< no2 <<" failed! < built: "<< pairNo +1 <<" edges."<<endl;
 				break;
 			}
 		}
 		if (pairNo == _imgNum-1)
 		{
+			for (auto i: image_matches)
+    			std::cout << i << ' ';
 			break;
 		}
 	}
-	cout<<"Succeed!"<<endl;
+	cout << "Succeed!" << endl;
 	Mat_<double> costGraph = Utils::buildCostGraph(_similarityMat);
 	_visitOrder0 = Graph::FloydForPath(costGraph);
 }
@@ -460,7 +474,7 @@ int TopoFinder::findNodeIndex(int imgNo)
 
 Mat_<int> TopoFinder::loadSimilarityMat()
 {
-	string filePath = Utils::baseDir + "/Cache/similarityMat.txt";
+	string filePath = Utils::baseDir + "/cache/similarityMat.txt";
 	ifstream fin;
 	fin.open(filePath.c_str(), ios::in);
 	if (!fin.is_open())
@@ -490,7 +504,7 @@ Mat_<int> TopoFinder::loadSimilarityMat()
 
 void TopoFinder::saveSimilarityMat(const Mat_<int> &similarityMat)
 {
-	string savePath = Utils::baseDir + "/Cache/similarityMat.txt";
+	string savePath = Utils::baseDir + "/cache/similarityMat.txt";
 	std::cout << "savePath: " << savePath << std::endl;
 	ofstream fout;
 	fout.open(savePath.c_str(), ios::out);
@@ -555,7 +569,7 @@ void TopoFinder::loadKeyFiles()
 	{
 		int imgIndex = i;
 		char filePath[1024];
-		sprintf(filePath, "/Cache/keyPtfile/keys%d", imgIndex);
+		sprintf(filePath, "/cache/keyPtfile/keys%d", imgIndex);
 		string filePath_ = Utils::baseDir + string(filePath);
 		cout<<"key "<<i<<endl;
 		Keys bar;
@@ -957,6 +971,8 @@ void TopoFinder::TsaveMosaicImage()
 		Mat warpedImage(newRow, newCol, CV_8UC3, Scalar(BKGRNDPIX,BKGRNDPIX,BKGRNDPIX));
 		string filePath = _Ptmatcher->_imgNameList[curImgNo];
 		Mat image = imread(filePath);
+		// cv::resize(image, image, cv::Size(resized_image_width, int(image.rows * resized_image_width / image.cols)));
+
 		Mat_<double> invHomoMat = homoMat.inv();
 		for (r = startY; r < endY; r ++)            
 		{

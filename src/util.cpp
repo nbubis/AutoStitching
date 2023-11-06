@@ -1,6 +1,7 @@
 #include "util.h"
 #include <filesystem>
 
+std::string Utils::baseDir = "";
 
 Mat Utils::grayToPesudoColor(Mat grayMap)
 {
@@ -77,7 +78,7 @@ bool Utils::loadMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet
 		exchanged = true;
 	}
 	char fileName[1024];
-	sprintf(fileName, "/Cache/matchPtfile/match%d_%d.txt", imgIndex1, imgIndex2);
+	sprintf(fileName, "/cache/matchPtfile/match%d_%d.txt", imgIndex1, imgIndex2);
 	string filePath = Utils::baseDir + string(fileName);
 	std::cout << "loading matches from: " << filePath << std::endl;
 	FILE *fin = fopen(filePath.c_str(), "r");

@@ -55,8 +55,7 @@ void ImageAligner::divideImageGroups()
 void ImageAligner::imageStitcherbyGroup(int referNo)
 {
 	//! =============== extract features ===============
-	bool extractFeature = true; //! ### set this for new data
-	_matcher = new PointMatcher(_filePathList, extractFeature);
+	_matcher = new PointMatcher(_filePathList);
 	_imgSizeList = _matcher->_imgSizeList;
 
 	//! =============== Topology sorting ===============
@@ -114,8 +113,7 @@ void ImageAligner::imageStitcherbyGroup(int referNo)
 void ImageAligner::imageStitcherbySolos(int referNo)
 {
 	//! =============== extract features ===============
-	bool extractFeature = true;     //! set this for new data
-	_matcher = new PointMatcher(_filePathList, extractFeature);
+	_matcher = new PointMatcher(_filePathList);
 	_imgSizeList = _matcher->_imgSizeList;
 	//! =============== Topology sorting ===============
 	bool shallLoad = false, isInOrder = false;     //! ### set this for new data
@@ -1343,6 +1341,7 @@ Rect ImageAligner::setImageSize(vector<Point2d> &nodePts)
 
 void ImageAligner::saveMosaicImage()
 {
+	/*
 	cout<<"#Warping sequential images ..."<<endl;
 	bool needMask = false, needAlpha = false;
 	vector<Point2d> nodePts;
@@ -1393,6 +1392,7 @@ void ImageAligner::saveMosaicImage()
 
 		string filePath = _filePathList[curImgNo];
 		Mat image = imread(filePath);
+
 		uchar *curImgData = (uchar*)image.data;
 		Mat_<double> invHomoMat = homoMat.inv();
 		for (r = startY; r < endY; r ++)            
@@ -1458,6 +1458,7 @@ void ImageAligner::saveMosaicImage()
 	string filePath = Utils::baseDir + "/mosaic.png";
 	imwrite(filePath, stitchImage);
 	cout<<"-Completed!"<<endl;
+	*/
 }
 
 
