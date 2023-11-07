@@ -25,8 +25,8 @@ def read_rescale_write(
     num_pixels: int,
     rescale: float,
 ):
-    scale = rescale if rescale else float(num_pixels) / max(img.shape[:2])
     img = cv2.imread(str(image_path))
+    scale = rescale if rescale else float(num_pixels) / max(img.shape[:2])
     rescaled_img = transform.rescale(
         img,
         scale,
@@ -61,5 +61,5 @@ if __name__ == '__main__':
             num_pixels=args.num_pixels,
             rescale=args.rescale)
     
-    mp_parallel_map(p_read_rescale_write, args.input.glob('*'))
+    mp_parallel_map(p_read_rescale_write, list(args.input.glob('*')))
         
