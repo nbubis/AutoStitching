@@ -195,7 +195,7 @@ void TopoFinder::buildMainChain()
 			if (!featureMatcher(no1, no1+1, pointSet1, pointSet2))
 			{
 				cout<<no1<<"&"<<no1+1<<"Time consecutive sequence break up!"<<endl;
-				exit(0);
+				throw std::logic_error("no matches");
 			}
 			et = clock();
 			_matchTime += (et-st);
@@ -215,7 +215,7 @@ void TopoFinder::buildMainChain()
 			if (!featureMatcher(no2, no2-1, pointSet1, pointSet2))
 			{
 				cout<<no2<<"&"<<no2-1<<"Time consecutive sequence break up!"<<endl;
-				exit(0);
+				throw std::logic_error("no matches");
 			}
 			et = clock();
 			_matchTime += (et-st);
@@ -241,7 +241,7 @@ void TopoFinder::buildMainChain()
 					if (!featureMatcher(no1-1, no1, pointSet1, pointSet2))
 					{
 						cout<<no1-1<<"&"<<no1<<"Time consecutive sequence break up!"<<endl;
-						exit(0);
+						throw std::logic_error("no matches");
 					}
 					et = clock();
 					_matchTime += (et-st);
@@ -265,7 +265,7 @@ void TopoFinder::buildMainChain()
 					if (!featureMatcher(no2+1, no2, pointSet1, pointSet2))
 					{
 						cout<<no2<<"&"<<no2+1<<"Time consecutive sequence break up!"<<endl;
-						exit(0);
+						throw std::logic_error("no matches");
 					}
 					et = clock();
 					_matchTime += (et-st);

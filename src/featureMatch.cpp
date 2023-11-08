@@ -30,7 +30,7 @@ void PointMatcher::featureExtractor()
 		string saveName_ = Utils::baseDir + string(saveName);
 		_keysFileList.push_back(saveName_);
 		savefeatures(keyPts, descriptors, saveName_);
-		cout<<imgIndex<<" keyPoint file saved!"<<endl;
+		cout << imgIndex << " keyPoint file saved!" << endl;
 	}
 	saveImgSizeList();
 }

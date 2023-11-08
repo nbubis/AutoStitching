@@ -88,7 +88,7 @@ void ImageAligner::imageStitcherbyGroup(int referNo)
 			}
 		}
 		cout<<"Models initializing ..."<<endl;
-		solveGroupModels(sIndex, eIndex);
+		solveGroupModelsS(sIndex, eIndex);
 		cout<<"Done!"<<endl;
 //		recheckTopology(sIndex, eIndex);
 		cout<<endl;
@@ -96,8 +96,8 @@ void ImageAligner::imageStitcherbyGroup(int referNo)
 		if (needRefine && i == _groupCusorList.size()-1)
 		{
 			bundleAdjustingA(1, eIndex);
-			//sIndex = 0;
-			//RefineAligningModels(sIndex, eIndex);
+			// sIndex = 0;
+			// RefineAligningModels(sIndex, eIndex);
 		}
 	}
 	cout<<"-Completed!"<<endl;
@@ -116,7 +116,7 @@ void ImageAligner::imageStitcherbySolos(int referNo)
 	_matcher = new PointMatcher(_filePathList);
 	_imgSizeList = _matcher->_imgSizeList;
 	//! =============== Topology sorting ===============
-	bool shallLoad = false, isInOrder = false;     //! ### set this for new data
+	bool shallLoad = false, isInOrder = true;     //! ### set this for new data
 	sortImageOrder(referNo, shallLoad, isInOrder);
 	//	return false;
 	//! =============== build match net ===============
@@ -382,11 +382,18 @@ void ImageAligner::solveGroupModelsS(int sIndex, int eIndex)
 		}
 	}
 	Mat_<double> X = (A.t()*A).inv()*(A.t()*L);
+
 	for (int i = 0; i < paramNum; i += 4)
 	{
 		Mat_<double> affineModel = (Mat_<double>(3,3) << X(i)  , -X(i+1), X(i+2),
 			                                             X(i+1), X(i), X(i+3),
 			                                             0,      0,     1);
+		std::cout << "affineModel before:\n" << affineModel << std::endl;
+		double blah = (0.2 * cv::determinant(affineModel) + 0.8);
+		affineModel = affineModel / blah;
+		std::cout << "blah is:" << blah << std::endl;
+		std::cout << "affineModel after:\n" << affineModel << std::endl;
+
 		//		cout<<modelParam<<endl;
 		_alignModelList.push_back(affineModel);
 		_initModelList.push_back(affineModel);
@@ -1519,6 +1526,9 @@ void ImageAligner::saveMosaicImageP()
 			warpedImage = Mat(newRow, newCol, CV_8UC3, Scalar(BKGRNDPIX,BKGRNDPIX,BKGRNDPIX));
 		}
 		uchar *curWarpData = (uchar*)warpedImage.data;
+
+		size_t warpDataSize = warpedImage.step[0] * warpedImage.rows;
+
 		string filePath = _filePathList[curImgNo];
 		Mat image = imread(filePath);
 		uchar *curImgData = (uchar*)image.data;
@@ -1550,6 +1560,9 @@ void ImageAligner::saveMosaicImageP()
 					grayValueG = grayValueG1*(1-(srcPt.y-v)) + grayValueG2*(srcPt.y-v);
 					grayValueB = grayValueB1*(1-(srcPt.y-v)) + grayValueB2*(srcPt.y-v);
 
+					if (3*(r*newCol+c) > warpDataSize) {
+						continue;
+					}
 					if (needMask)
 					{
 						if (!needAlpha)
@@ -1577,10 +1590,10 @@ void ImageAligner::saveMosaicImageP()
 		{
 			continue;
 		}
-		char name[512];
-		sprintf(name,"/Masks/warp%03d.png", curImgNo);
-		string savePath = Utils::baseDir + string(name);
-		imwrite(savePath, warpedImage);
+		// char name[512];
+		// sprintf(name,"/Masks/warp%03d.png", curImgNo);
+		// string savePath = Utils::baseDir + string(name);
+		// imwrite(savePath, warpedImage);
 	}
 
 	if (0)

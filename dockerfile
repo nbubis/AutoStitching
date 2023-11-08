@@ -18,10 +18,9 @@ WORKDIR ${BASE_DIRECTORY}/levmar-2.6/build
 RUN cmake ../ -DCMAKE_CXX_STANDARD_LIBRARIES="-lm" -D BUILD_DEMO=FALSE &&\
     make
 
-RUN echo $pwd && echo `ls`
 RUN cp liblevmar.a /usr/local/lib/ &&\
-    mkdir -p /usr/local/lnclude/levmar &&\
-    cp ../levmar.h /usr/local/lnclude/levmar/
+    mkdir -p /usr/local/include/levmar &&\
+    cp ../levmar.h /usr/local/include/levmar/
 
 WORKDIR ${BASE_DIRECTORY}
 

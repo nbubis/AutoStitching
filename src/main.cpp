@@ -1,5 +1,5 @@
 #include <iostream>
-// #include <execution>
+#include <execution>
 #include <filesystem>
 #include <limits>
 #include <utility>
@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
 		std::filesystem::create_directories(Utils::baseDir + "/resized_images/");
 
 		for(auto imgPath : imagePathSet) {
-			cv::Mat image = imread(imgPath);
+			cv::Mat image = cv::imread(imgPath);
 			cv::resize(image, image, cv::Size(args.resized_image_width, int(image.rows * args.resized_image_width / image.cols)));
 			std::string resized_path = Utils::baseDir + "/resized_images/" + std::filesystem::path(imgPath).filename().string();
 			cv::imwrite(resized_path, image);
@@ -63,15 +63,6 @@ int main(int argc, char* argv[])
 
 		auto end = std::next(resizedImagePathSet.begin(), std::min(args.image_num_limit, (int)resizedImagePathSet.size()));
 		std::vector<std::string> imagePathList(resizedImagePathSet.begin(), end);
-
-		// for (auto imgPath: originalImagePathList) {
-		// 	cv::Mat image = imread(imgPath);
-		// 	cv::resize(image, image, cv::Size(args.resized_image_width, int(image.rows * args.resized_image_width / image.cols)));
-		// 	std::string resized_path = Utils::baseDir + "/resized_images/" + std::filesystem::path(imgPath).filename().string();
-		// 	cv::imwrite(resized_path, image);
-		// 	imagePathList.push_back(resized_path);
-    	// 	std::cout << "Added image " << resized_path << '\n';
-		// }
 
 		std::vector<cv::Point2d> PtSet1, PtSet2;
 		auto matcher = new PointMatcher(imagePathList);
@@ -95,11 +86,12 @@ int main(int argc, char* argv[])
 			}
 		}
 
-		for (auto i : clusters) {
-			try {
-				std::cout << i.first << " " << i.second << std::endl; 
-				if (i.first >= i.second - 1) {
-					continue;
+
+    	for (auto i : clusters) {
+            try {
+                std::cout << i.first << " " << i.second << std::endl; 
+                if (i.first >= i.second - 1) {
+                    continue;
 				}
 				std::vector<std::string> clusterPathList;
 				for (int j = i.first; j < i.second - 1; j++) {
@@ -114,11 +106,37 @@ int main(int argc, char* argv[])
 				std::filesystem::create_directory(Utils::baseDir + "/cache/matchPtfile");
 				std::filesystem::create_directory(Utils::baseDir + "/cache/keyPtfile");
 				imgAligner.imageStitcherbyGroup(referNo);
-			} catch(...) {
-				continue;
-			}
-		}
-		
+            } catch(...) {
+                continue;
+            }
+        }
+
+    	// std::for_each(std::execution::par_unseq, std::begin(clusters), std::end(clusters), 
+        // 	[imagePathList, args](auto & i) { 
+		// 		try {
+		// 			std::cout << i.first << " " << i.second << std::endl; 
+		// 			if (i.first >= i.second - 1) {
+		// 				return;
+		// 			}
+		// 			std::vector<std::string> clusterPathList;
+		// 			for (int j = i.first; j < i.second - 1; j++) {
+		// 				clusterPathList.push_back(imagePathList[j]);
+		// 			} 
+
+		// 			ImageAligner imgAligner(clusterPathList);
+		// 			int referNo = 1;
+
+		// 			Utils::baseDir = args.output_directory + std::to_string(i.first);
+		// 			std::filesystem::create_directory(Utils::baseDir);
+		// 			std::filesystem::create_directory(Utils::baseDir + "/cache/");
+		// 			std::filesystem::create_directory(Utils::baseDir + "/cache/matchPtfile");
+		// 			std::filesystem::create_directory(Utils::baseDir + "/cache/keyPtfile");
+
+		// 			imgAligner.imageStitcherbyGroup(referNo);
+		// 		} catch(...) {
+		// 			return;
+		// 		}
+		// 	});
 
 		auto end_time = std::chrono::system_clock::now();
 
