@@ -176,12 +176,15 @@ bool PointMatcher::featureMatcher(int imgIndex1, int imgIndex2, vector<Point2d> 
 	FlannBasedMatcher matcher; 
 	vector<vector<DMatch>> knnmatches;
 	int num1 = keyPts1.size(), num2 = keyPts2.size();
-	int kn = min(min(num1, num2), 5);
-    try {
-	    matcher.knnMatch(descriptors1, descriptors2, knnmatches, kn);   
-    } catch(std::exception const& e){
-    	std::cout<<"Exception: "<< e.what()<<std::endl;
+
+	if (num1 < 5 || num2 < 5) {
+		return false;
 	}
+
+	int knn = min(min(num1, num2), 5);
+
+	matcher.knnMatch(descriptors1, descriptors2, knnmatches, knn);   
+
 	int i, j;
 	double minimaDsit = 99999;
 	for (i = 0; i < knnmatches.size(); i ++)

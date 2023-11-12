@@ -6,8 +6,8 @@
 #include <iostream>
 #include <fstream>
 
-#define PENALTY_COEFF 0.10  //! set for LM only
-#define Lambada       1  //! set for BA only
+#define PENALTY_COEFF 0.5  //! set for LM only
+#define Lambada       0.5  //! set for BA only
 #define OPT_GROUP_NUM 30
 #define BKGRNDPIX     255
 #define Need_Mask     1

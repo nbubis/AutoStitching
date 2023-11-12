@@ -95,9 +95,9 @@ void ImageAligner::imageStitcherbyGroup(int referNo)
 		bool needRefine = true;
 		if (needRefine && i == _groupCusorList.size()-1)
 		{
-			bundleAdjustingA(1, eIndex);
-			// sIndex = 0;
-			// RefineAligningModels(sIndex, eIndex);
+			bundleAdjustinga(1, eIndex);
+			sIndex = 0;
+			RefineAligningModels(sIndex, eIndex);
 		}
 	}
 	cout<<"-Completed!"<<endl;
@@ -349,8 +349,8 @@ void ImageAligner::solveGroupModelsS(int sIndex, int eIndex)
 				int fillPos = 4*(i-sIndex);
 				for (int k = 0; k < curPts.size(); k ++)
 				{
-					A(2*rn,fillPos)     = curPts[k].x; A(2*rn,fillPos+1)   = -curPts[k].y; A(2*rn,fillPos+2) = 1;
-					A(2*rn+1,fillPos) = curPts[k].y; A(2*rn+1,fillPos+1) = curPts[k].x; A(2*rn+1,fillPos+3) = 1;
+					A(2*rn,fillPos)   = curPts[k].x; A(2*rn,fillPos+1)   = -curPts[k].y; A(2*rn,fillPos+2)   = 1;
+					A(2*rn+1,fillPos) = curPts[k].y; A(2*rn+1,fillPos+1) =  curPts[k].x; A(2*rn+1,fillPos+3) = 1;
 					L(2*rn)   = neigPts[k].x;
 					L(2*rn+1) = neigPts[k].y;
 					rn ++;
@@ -388,11 +388,11 @@ void ImageAligner::solveGroupModelsS(int sIndex, int eIndex)
 		Mat_<double> affineModel = (Mat_<double>(3,3) << X(i)  , -X(i+1), X(i+2),
 			                                             X(i+1), X(i), X(i+3),
 			                                             0,      0,     1);
-		std::cout << "affineModel before:\n" << affineModel << std::endl;
-		double blah = (0.2 * cv::determinant(affineModel) + 0.8);
-		affineModel = affineModel / blah;
-		std::cout << "blah is:" << blah << std::endl;
-		std::cout << "affineModel after:\n" << affineModel << std::endl;
+		// std::cout << "affineModel before:\n" << affineModel << std::endl;
+		// double blah = (0.2 * cv::determinant(affineModel) + 0.8);
+		// affineModel = affineModel / blah;
+		// std::cout << "blah is:" << blah << std::endl;
+		// std::cout << "affineModel after:\n" << affineModel << std::endl;
 
 		//		cout<<modelParam<<endl;
 		_alignModelList.push_back(affineModel);
