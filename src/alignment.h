@@ -6,8 +6,8 @@
 #include <iostream>
 #include <fstream>
 
-#define PENALTY_COEFF 0.5  //! set for LM only
-#define Lambada       0.5  //! set for BA only
+#define PENALTY_COEFF 0.2  //! set for LM only
+#define Lambada       0.2  //! set for BA only
 #define OPT_GROUP_NUM 30
 #define BKGRNDPIX     255
 #define Need_Mask     1
@@ -39,11 +39,12 @@ struct LMData
 class ImageAligner
 {
 public:
-	ImageAligner(vector<string> filePathList)
+	ImageAligner(vector<string> filePathList, std::string outputDir)
 	{
 		_filePathList = filePathList;
 		_imgNum = filePathList.size();
 		_refImgNo = 0;
+		_outputDir = outputDir;
 	};
 	~ImageAligner(){};
 
@@ -106,4 +107,5 @@ private:
 	vector<double> reliabilityList;          //! record the mean square error of the initial affine model of each image
 	vector<string> _filePathList;
 	vector<Size> _imgSizeList;               //! order agree with image no.
+	std::string _outputDir;
 };

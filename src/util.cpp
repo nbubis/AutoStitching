@@ -1,8 +1,6 @@
 #include "util.h"
 #include <filesystem>
 
-std::string Utils::baseDir = "";
-
 Mat Utils::grayToPesudoColor(Mat grayMap)
 {
 	//! �� 255, 0, 0   -> 255
@@ -67,53 +65,53 @@ Mat Utils::grayToPesudoColor(Mat grayMap)
 }
 
 
-bool Utils::loadMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2)
-{
-	bool exchanged = false;
-	if (imgIndex1 > imgIndex2)          //set a consistent standard: smaller index in the left
-	{
-		int temp = imgIndex2;
-		imgIndex2 = imgIndex1;
-		imgIndex1 = temp;
-		exchanged = true;
-	}
-	char fileName[1024];
-	sprintf(fileName, "/cache/matchPtfile/match%d_%d.txt", imgIndex1, imgIndex2);
-	string filePath = Utils::baseDir + string(fileName);
-	std::cout << "loading matches from: " << filePath << std::endl;
-	FILE *fin = fopen(filePath.c_str(), "r");
-	if (fin == nullptr)
-	{
-		return false;
-	}
-	int PtNum = 0;
-	fscanf(fin, "%d", &PtNum);
-	if (!exchanged)
-	{
-		for (int i = 0; i < PtNum; i ++)
-		{
-			double x1, y1, x2, y2;
-			fscanf(fin, "%lf %lf %lf %lf", &x1, &y1, &x2, &y2);
-			Point2d point1(x1,y1), point2(x2,y2);
-			pointSet1.push_back(point1);
-			pointSet2.push_back(point2);
-		}
-	}
-	else
-	{
-		for (int i = 0; i < PtNum; i ++)
-		{
-			double x1, y1, x2, y2;
-			fscanf(fin, "%lf %lf %lf %lf", &x1, &y1, &x2, &y2);
-			Point2d point1(x1,y1), point2(x2,y2);
-			pointSet1.push_back(point2);
-			pointSet2.push_back(point1);
-		}
-	}
-	fclose(fin);
-	return true;
-//	cout<<"Loaded "<<pointSet1.size()<<" points between image "<<imgIndex1<<" and image "<<imgIndex2<<endl;
-}
+// bool Utils::loadMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2)
+// {
+// 	bool exchanged = false;
+// 	if (imgIndex1 > imgIndex2)          //set a consistent standard: smaller index in the left
+// 	{
+// 		int temp = imgIndex2;
+// 		imgIndex2 = imgIndex1;
+// 		imgIndex1 = temp;
+// 		exchanged = true;
+// 	}
+// 	char fileName[1024];
+// 	sprintf(fileName, "/cache/matchPtfile/match%d_%d.txt", imgIndex1, imgIndex2);
+// 	string filePath = _outputDir + string(fileName);
+// 	std::cout << "loading matches from: " << filePath << std::endl;
+// 	FILE *fin = fopen(filePath.c_str(), "r");
+// 	if (fin == nullptr)
+// 	{
+// 		return false;
+// 	}
+// 	int PtNum = 0;
+// 	fscanf(fin, "%d", &PtNum);
+// 	if (!exchanged)
+// 	{
+// 		for (int i = 0; i < PtNum; i ++)
+// 		{
+// 			double x1, y1, x2, y2;
+// 			fscanf(fin, "%lf %lf %lf %lf", &x1, &y1, &x2, &y2);
+// 			Point2d point1(x1,y1), point2(x2,y2);
+// 			pointSet1.push_back(point1);
+// 			pointSet2.push_back(point2);
+// 		}
+// 	}
+// 	else
+// 	{
+// 		for (int i = 0; i < PtNum; i ++)
+// 		{
+// 			double x1, y1, x2, y2;
+// 			fscanf(fin, "%lf %lf %lf %lf", &x1, &y1, &x2, &y2);
+// 			Point2d point1(x1,y1), point2(x2,y2);
+// 			pointSet1.push_back(point2);
+// 			pointSet2.push_back(point1);
+// 		}
+// 	}
+// 	fclose(fin);
+// 	return true;
+// //	cout<<"Loaded "<<pointSet1.size()<<" points between image "<<imgIndex1<<" and image "<<imgIndex2<<endl;
+// }
 
 
 Mat_<double> Utils::buildCostGraph(const Mat_<int> &similarMat)

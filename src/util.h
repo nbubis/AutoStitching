@@ -11,12 +11,6 @@ using namespace cv;
 
 namespace Utils
 {
-	// ********** global variable list ********** //
-	extern string baseDir;
-
-	// inline void setBaseDir(std::string newBaseDir) {
-  	// 	baseDir = newBaseDir;
-	// }
 
 	struct TreeNode
 	{
@@ -35,7 +29,7 @@ namespace Utils
 
 	vector<string> get_filelist(string foldname);
 	Mat_<double> buildCostGraph(const Mat_<int> &similarMat);
-	bool loadMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2);
+	// bool loadMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2);
 	Point2d pointTransform(Mat_<double> homoMat, Point2d srcPt);
 	void pointTransform(Mat_<double> homoMat, Point2d srcPt, Point2d &dstPt);
 	void pointTransform(Mat_<double> homoMat, vector<Point2d> &pointSet);

@@ -13,12 +13,12 @@ Mat_<double> TopoFinder::findTopology(bool shallLoad, bool isInOrder)
 	clock_t start_time, end_time;
 	start_time = clock();
 	cout<<"Building similarity table ...\n";
-	Mat_<int> similarMat = detectSimilarityByGuiding();
-	//		Mat_<int> similarMat = detectSimilarityOnGlobal();
+	// Mat_<int> similarMat = detectSimilarityByGuiding();
+	Mat_<int> similarMat = detectSimilarityOnGlobal();
 	end_time = clock();
 	_totalTime = 1000*(end_time-start_time)/CLOCKS_PER_SEC;   //! ms
 	//! write out 
-	string savePath = Utils::baseDir + "/topoInfor.txt";
+	string savePath = _outputDir + "/topoInfor.txt";
 	ofstream fout;
 	fout.open(savePath.c_str(), ios::out);
 	fout<<_shotNum<<"  in  "<<_attempNum<<endl;
@@ -32,14 +32,13 @@ Mat_<double> TopoFinder::findTopology(bool shallLoad, bool isInOrder)
 Mat_<int> TopoFinder::detectSimilarityOnGlobal()
 {
 	Mat_<int> similarMat = Mat(_imgNum, _imgNum, CV_32SC1, Scalar(0));
-	for (int i = 0; i < _imgNum-1; i ++)
+	for (int i = 0; i < _imgNum - 1; i++)
 	{
-		for (int j = i+1; j < _imgNum; j ++)
+		for (int j = i + 1; j < std::min(i + 4, _imgNum); j++)
 		{		
 			_attempNum ++;
 			vector<Point2d> pointSet1, pointSet2;
-//			Utils::loadMatchPts(i,j,pointSet1,pointSet2);
-			if (featureMatcher(i,j,pointSet1,pointSet2))
+			if (_Ptmatcher->featureMatcher(i,j,pointSet1,pointSet2))
 			{
 				similarMat(i,j) = pointSet1.size();
 				similarMat(j,i) = pointSet1.size();
@@ -82,7 +81,7 @@ Mat_<int> TopoFinder::detectSimilarityByGuiding()
 		vector<Point2d> pointSet1, pointSet2;
 		clock_t st, et;
 		st = clock();
-		Utils::loadMatchPts(refNo, curNo, pointSet1, pointSet2);
+		_Ptmatcher->loadMatchPts(refNo, curNo, pointSet1, pointSet2);
 		et = clock();
 		_matchTime -= (et-st);
 	    Utils::pointTransform(_affineMatList[refIndex], pointSet1);
@@ -186,15 +185,15 @@ void TopoFinder::buildMainChain()
 		vector<Point2d> pointSet1, pointSet2;
 		if (Load_Matches)
 		{
-			Utils::loadMatchPts(no1, no1+1, pointSet1, pointSet2);
+			_Ptmatcher->loadMatchPts(no1, no1+1, pointSet1, pointSet2);
 		}
 		else
 		{
 			clock_t st, et;
 			st = clock();
-			if (!featureMatcher(no1, no1+1, pointSet1, pointSet2))
+			if (!_Ptmatcher->featureMatcher(no1, no1+1, pointSet1, pointSet2))
 			{
-				cout<<no1<<"&"<<no1+1<<"Time consecutive sequence break up!"<<endl;
+				cout << no1 << "&" << no1+1 <<"Time consecutive sequence break up!" << endl;
 				throw std::logic_error("no matches");
 			}
 			et = clock();
@@ -206,13 +205,13 @@ void TopoFinder::buildMainChain()
 		_attempMap(no1+1, no1) = 1;
 		if (Load_Matches)
 		{
-			Utils::loadMatchPts(no2, no2-1, pointSet1, pointSet2);
+			_Ptmatcher->loadMatchPts(no2, no2-1, pointSet1, pointSet2);
 		}
 		else
 		{
 			clock_t st, et;
 			st = clock();
-			if (!featureMatcher(no2, no2-1, pointSet1, pointSet2))
+			if (!_Ptmatcher->featureMatcher(no2, no2-1, pointSet1, pointSet2))
 			{
 				cout<<no2<<"&"<<no2-1<<"Time consecutive sequence break up!"<<endl;
 				throw std::logic_error("no matches");
@@ -232,13 +231,13 @@ void TopoFinder::buildMainChain()
 				_visitOrder0.push_back(TreeNode(no1-1,no1,0));
 				if (Load_Matches)
 				{
-					Utils::loadMatchPts(no1-1, no1, pointSet1, pointSet2);
+					_Ptmatcher->loadMatchPts(no1-1, no1, pointSet1, pointSet2);
 				}
 				else
 				{
 					clock_t st, et;
 					st = clock();
-					if (!featureMatcher(no1-1, no1, pointSet1, pointSet2))
+					if (!_Ptmatcher->featureMatcher(no1-1, no1, pointSet1, pointSet2))
 					{
 						cout<<no1-1<<"&"<<no1<<"Time consecutive sequence break up!"<<endl;
 						throw std::logic_error("no matches");
@@ -256,13 +255,13 @@ void TopoFinder::buildMainChain()
 				_visitOrder0.push_back(TreeNode(no2+1,no2,0));
 				if (Load_Matches)
 				{
-					Utils::loadMatchPts(no2+1, no2, pointSet1, pointSet2);
+					_Ptmatcher->loadMatchPts(no2+1, no2, pointSet1, pointSet2);
 				}
 				else
 				{
 					clock_t st, et;
 					st = clock();
-					if (!featureMatcher(no2+1, no2, pointSet1, pointSet2))
+					if (!_Ptmatcher->featureMatcher(no2+1, no2, pointSet1, pointSet2))
 					{
 						cout<<no2<<"&"<<no2+1<<"Time consecutive sequence break up!"<<endl;
 						throw std::logic_error("no matches");
@@ -288,7 +287,7 @@ void TopoFinder::searchMainChain()
 {
 	//! overlapping probability of image pairs
 	Mat_<double> guidingTable = getGuidingTableP();
-	int iter = 0, maxIter = max(int(_imgNum*0.2), 50);
+	int iter = 0, maxIter = max(int(_imgNum*0.2), 100);
 
 	std::vector <int> image_matches(_imgNum, 0);
 
@@ -314,7 +313,7 @@ void TopoFinder::searchMainChain()
 
 			clock_t st, et;
 			st = clock();
-			bool yeah = featureMatcher(no1,no2,pointSet1,pointSet2);
+			bool yeah = _Ptmatcher->featureMatcher(no1,no2,pointSet1,pointSet2);
 			et = clock();
 			_matchTime += (et-st);
 			if (yeah)
@@ -387,7 +386,7 @@ void TopoFinder::detectPotentialOverlap(int curIndex, vector<Point2d> &pointSet1
 		//! for debug test
 		if (Load_Matches)
 		{
-			if (Utils::loadMatchPts(testNo,curNo,newPtSet1,newPtSet2))
+			if (_Ptmatcher->loadMatchPts(testNo,curNo,newPtSet1,newPtSet2))
 			{
 				_similarityMat(testNo,curNo) = newPtSet1.size();
 				_similarityMat(curNo,testNo) = newPtSet1.size();
@@ -407,7 +406,7 @@ void TopoFinder::detectPotentialOverlap(int curIndex, vector<Point2d> &pointSet1
 			{
 				clock_t st, et;
 				st = clock();
-				bool yeah = featureMatcher(testNo,curNo,newPtSet1,newPtSet2);
+				bool yeah = _Ptmatcher->featureMatcher(testNo,curNo,newPtSet1,newPtSet2);
 				et = clock();
 				_matchTime += (et-st);
 				if (yeah)
@@ -474,7 +473,7 @@ int TopoFinder::findNodeIndex(int imgNo)
 
 Mat_<int> TopoFinder::loadSimilarityMat()
 {
-	string filePath = Utils::baseDir + "/cache/similarityMat.txt";
+	string filePath = _outputDir + "/cache/similarityMat.txt";
 	ifstream fin;
 	fin.open(filePath.c_str(), ios::in);
 	if (!fin.is_open())
@@ -504,7 +503,7 @@ Mat_<int> TopoFinder::loadSimilarityMat()
 
 void TopoFinder::saveSimilarityMat(const Mat_<int> &similarityMat)
 {
-	string savePath = Utils::baseDir + "/cache/similarityMat.txt";
+	string savePath = _outputDir + "/cache/similarityMat.txt";
 	std::cout << "savePath: " << savePath << std::endl;
 	ofstream fout;
 	fout.open(savePath.c_str(), ios::out);
@@ -570,7 +569,7 @@ void TopoFinder::loadKeyFiles()
 		int imgIndex = i;
 		char filePath[1024];
 		sprintf(filePath, "/cache/keyPtfile/keys%d", imgIndex);
-		string filePath_ = Utils::baseDir + string(filePath);
+		string filePath_ = _outputDir + string(filePath);
 		cout<<"key "<<i<<endl;
 		Keys bar;
 		vector<int> subIndexList;    //! features of the target ocatve
@@ -626,107 +625,110 @@ void TopoFinder::loadKeyFiles()
 }
 
 
-bool TopoFinder::featureMatcher(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2)
-{
-	pointSet1.clear();
-	pointSet2.clear();
-	vector<Point2d> keyPts1, keyPts2;
-	keyPts1 = _keyList[imgIndex1].pts;
-	keyPts2 = _keyList[imgIndex2].pts;
-	Mat descriptors1, descriptors2;
-	descriptors1 = _keyList[imgIndex1].descriptors;
-	descriptors2 = _keyList[imgIndex2].descriptors;
-	std::cout << "attempting to match " << imgIndex1 << " " << imgIndex2 << std::endl;
-	// Matching descriptor vectors using FLANN matcher
-	vector<DMatch> m_Matches;
-	FlannBasedMatcher matcher; 
-	vector<vector<DMatch>> knnmatches;
-	int num1 = keyPts1.size(), num2 = keyPts2.size();
-	int kn = min(min(num1, num2), 5);
-	// try {
-	    matcher.knnMatch(descriptors1, descriptors2, knnmatches, kn);   
-    // } catch(std::exception const& e){
-    // 	std::cout<<"Exception: "<< e.what()<<std::endl;
-	// }
-	int i, j;
-	double minimaDsit = 99999;
-	for (i = 0; i < knnmatches.size(); i ++)
-	{
-		double dist = knnmatches[i][1].distance;
-		if (dist < minimaDsit)
-		{
-			minimaDsit = dist;
-		}
-	}
-	double fitedThreshold = minimaDsit * 5;
-	int keypointsize = knnmatches.size();
-	for (i = 0; i < keypointsize; i ++)
-	{  
-		const DMatch nearDist1 = knnmatches[i][0];
-		const DMatch nearDist2 = knnmatches[i][1];
-		double distanceRatio = nearDist1.distance / nearDist2.distance;
-		if (nearDist1.distance < fitedThreshold && distanceRatio < 0.7)
-		{
-			m_Matches.push_back(nearDist1);
-		}
-	}
+// bool TopoFinder::featureMatcher(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2)
+// {
+// 	pointSet1.clear();
+// 	pointSet2.clear();
+// 	vector<Point2d> keyPts1, keyPts2;
+// 	keyPts1 = _keyList[imgIndex1].pts;
+// 	keyPts2 = _keyList[imgIndex2].pts;
+// 	Mat descriptors1, descriptors2;
+// 	descriptors1 = _keyList[imgIndex1].descriptors;
+// 	descriptors2 = _keyList[imgIndex2].descriptors;
+// 	std::cout << "attempting to match " << imgIndex1 << " " << imgIndex2 << std::endl;
+// 	// Matching descriptor vectors using FLANN matcher
+// 	vector<DMatch> m_Matches;
+// 	FlannBasedMatcher matcher; 
+// 	vector<vector<DMatch>> knnmatches;
+// 	int num1 = keyPts1.size(), num2 = keyPts2.size();
 
-	vector<Point2d> iniPts1, iniPts2;
-	for (i = 0; i < m_Matches.size(); i ++)   //get initial match pairs
-	{
-		int queryIndex = m_Matches[i].queryIdx;
-		int trainIndex = m_Matches[i].trainIdx;
-		Point2d tempPt1 = keyPts1[queryIndex];
-		Point2d tempPt2 = keyPts2[trainIndex];
-		iniPts1.push_back(tempPt1);
-		iniPts2.push_back(tempPt2);
-	}
-	if (iniPts1.size() < 10)
-	{
-		return false;
-	}
+// 	if (num1 < 5 || num2 < 5) {
+// 		return false;
+// 	}
+// 	// try {
+// 	matcher.knnMatch(descriptors1, descriptors2, knnmatches, 5);   
+//     // } catch(std::exception const& e){
+//     // 	std::cout<<"Exception: "<< e.what()<<std::endl;
+// 	// }
+// 	int i, j;
+// 	double minimaDsit = 99999;
+// 	for (i = 0; i < knnmatches.size(); i ++)
+// 	{
+// 		double dist = knnmatches[i][1].distance;
+// 		if (dist < minimaDsit)
+// 		{
+// 			minimaDsit = dist;
+// 		}
+// 	}
+// 	double fitedThreshold = minimaDsit * 5;
+// 	int keypointsize = knnmatches.size();
+// 	for (i = 0; i < keypointsize; i ++)
+// 	{  
+// 		const DMatch nearDist1 = knnmatches[i][0];
+// 		const DMatch nearDist2 = knnmatches[i][1];
+// 		double distanceRatio = nearDist1.distance / nearDist2.distance;
+// 		if (nearDist1.distance < fitedThreshold && distanceRatio < 0.7)
+// 		{
+// 			m_Matches.push_back(nearDist1);
+// 		}
+// 	}
 
-	vector<uchar> status;
-	//! utilize epi-polar geometry constraints to delete missing matches
-	Mat Fmatrix = findFundamentalMat(iniPts1, iniPts2, RANSAC, 1.5, 0.99, status);
-	for (i = 0; i < status.size(); i ++)
-	{
-		if (status[i] == 1)
-		{
-			pointSet1.push_back(iniPts1[i]);
-			pointSet2.push_back(iniPts2[i]);
-		}
-	}
-	if (pointSet1.size() < 10)
-	{
-		return false;
-	}
+// 	vector<Point2d> iniPts1, iniPts2;
+// 	for (i = 0; i < m_Matches.size(); i ++)   //get initial match pairs
+// 	{
+// 		int queryIndex = m_Matches[i].queryIdx;
+// 		int trainIndex = m_Matches[i].trainIdx;
+// 		Point2d tempPt1 = keyPts1[queryIndex];
+// 		Point2d tempPt2 = keyPts2[trainIndex];
+// 		iniPts1.push_back(tempPt1);
+// 		iniPts2.push_back(tempPt2);
+// 	}
+// 	if (iniPts1.size() < 10)
+// 	{
+// 		return false;
+// 	}
 
-	Mat homoMat = findHomography(iniPts2, iniPts1, RANSAC, 2.5);    //! Pt1 = homoMat*Pt2
-	vector<Point2d> goodPts1, goodPts2;
-	for (i = 0; i < pointSet1.size(); i ++)    //mean value
-	{
-		Point2d warpedPt;
-		Utils::pointTransform(homoMat, pointSet2[i], warpedPt);
-		double dist = 0;
-		dist = sqrt((warpedPt.x-pointSet1[i].x)*(warpedPt.x-pointSet1[i].x) + (warpedPt.y-pointSet1[i].y)*(warpedPt.y-pointSet1[i].y));
-		if (dist < 2.0)
-		{
-			goodPts1.push_back(pointSet1[i]);
-			goodPts2.push_back(pointSet2[i]);
-		}
-	}
-	pointSet1 = goodPts1;
-	pointSet2 = goodPts2;
-	if (pointSet1.size() < 10)    //! modify as 20
-	{
-		return false;
-	}
-	cout<<"Image "<<imgIndex1<<" and image "<<imgIndex2<<" matched "<<pointSet1.size()<<" points"<<endl;
-	_Ptmatcher->saveMatchPts(imgIndex1, imgIndex2, pointSet1, pointSet2);
-//	_Ptmatcher->drawMatches(imgIndex1, imgIndex2, pointSet1, pointSet2);
-	return true;
-}
+// 	// vector<uchar> status;
+// 	// //! utilize epi-polar geometry constraints to delete missing matches
+// 	// Mat Fmatrix = findFundamentalMat(iniPts1, iniPts2, RANSAC, 1.5, 0.99, status);
+// 	// for (i = 0; i < status.size(); i ++)
+// 	// {
+// 	// 	if (status[i] == 1)
+// 	// 	{
+// 	// 		pointSet1.push_back(iniPts1[i]);
+// 	// 		pointSet2.push_back(iniPts2[i]);
+// 	// 	}
+// 	// }
+// 	// if (pointSet1.size() < 10)
+// 	// {
+// 	// 	return false;
+// 	// }
+
+// 	Mat homoMat = findHomography(iniPts2, iniPts1, RANSAC, 2.5);    //! Pt1 = homoMat*Pt2
+// 	vector<Point2d> goodPts1, goodPts2;
+// 	for (i = 0; i < pointSet1.size(); i ++)    //mean value
+// 	{
+// 		Point2d warpedPt;
+// 		Utils::pointTransform(homoMat, pointSet2[i], warpedPt);
+// 		double dist = 0;
+// 		dist = sqrt((warpedPt.x-pointSet1[i].x)*(warpedPt.x-pointSet1[i].x) + (warpedPt.y-pointSet1[i].y)*(warpedPt.y-pointSet1[i].y));
+// 		if (dist < 2.0)
+// 		{
+// 			goodPts1.push_back(pointSet1[i]);
+// 			goodPts2.push_back(pointSet2[i]);
+// 		}
+// 	}
+// 	pointSet1 = goodPts1;
+// 	pointSet2 = goodPts2;
+// 	if (pointSet1.size() < 10)    //! modify as 20
+// 	{
+// 		return false;
+// 	}
+// 	cout<<"Image "<<imgIndex1<<" and image "<<imgIndex2<<" matched "<<pointSet1.size()<<" points"<<endl;
+// 	_Ptmatcher->saveMatchPts(imgIndex1, imgIndex2, pointSet1, pointSet2);
+// //	_Ptmatcher->drawMatches(imgIndex1, imgIndex2, pointSet1, pointSet2);
+// 	return true;
+// }
 
 
 int TopoFinder::calSimilarNum(int imgIndex1, int imgIndex2)
@@ -881,7 +883,7 @@ void TopoFinder::drawTopoNet()
 		Point2i endPt = dotPtList[refIndex];
 		line(displayPlane, startPt, endPt, Scalar(0,0,255), 3);
 	}*/
-	string savePath = Utils::baseDir + "/topoGraph.png";
+	string savePath = _outputDir + "/topoGraph.png";
 	imwrite(savePath, displayPlane);
 	cout<<"The topology graph of images is saved!"<<endl;
 }
@@ -1016,10 +1018,10 @@ void TopoFinder::TsaveMosaicImage()
 		}
 		char name[512];
 		sprintf(name,"/Masks/warp%d.png", curImgNo);
-		string savePath = Utils::baseDir + string(name);
+		string savePath = _outputDir + string(name);
 		imwrite(savePath, warpedImage);
 	}
-	string filePath = Utils::baseDir + "/topoMosaic.png";
+	string filePath = _outputDir + "/topoMosaic.png";
 	imwrite(filePath, stitchImage);
 }
 
@@ -1130,6 +1132,6 @@ void TopoFinder::drawTreeLevel()
 		Point2i endPt(c,r1);
 		line(displayPlane, startPt, endPt, Scalar(0,0,255), 2);
 	}
-	string savePath = Utils::baseDir + "/spinningTree.jpg";
+	string savePath = _outputDir + "/spinningTree.jpg";
 	imwrite(savePath, displayPlane);
 }

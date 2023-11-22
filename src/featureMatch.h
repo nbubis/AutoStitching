@@ -19,11 +19,12 @@ using namespace cv;
 class PointMatcher
 {
 public:
-	PointMatcher(vector<string> imgNameList)
+	PointMatcher(vector<string> imgNameList, std::string outputDir)
 	{
 		featureDimension = 64;
 		_imgNameList = imgNameList;
 		_imgNum = imgNameList.size();
+		_outputDir = outputDir;
 		featureExtractor();
 	};
 
@@ -37,10 +38,10 @@ public:
 	bool tentativeMatcher(int imgIndex1, int imgIndex2);
 	bool featureMatcher(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2);    //! all the imgIndex start from 1
 	void saveMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> pointSet1, vector<Point2d> pointSet2);
-	// bool loadMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2);
+	bool loadMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2);
 
 	void pointConvert(Mat_<double> homoMat, Point2d src, Point2d &dst);
-	void drawMatches(int imgIndex1, int imgIndex2, vector<Point2d> pointSet1, vector<Point2d> pointSet2);
+	// void drawMatches(int imgIndex1, int imgIndex2, vector<Point2d> pointSet1, vector<Point2d> pointSet2);
 
 public:
 	vector<Size> _imgSizeList;
@@ -50,4 +51,5 @@ private:
 	int _imgNum;
 	int featureDimension;
 	vector<string> _keysFileList;
+	std::string _outputDir;
 };

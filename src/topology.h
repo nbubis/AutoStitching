@@ -45,13 +45,14 @@ struct Keys
 class TopoFinder
 {
 public:
-	TopoFinder(PointMatcher *matcher)
+	TopoFinder(PointMatcher *matcher, std::string outputDir)
 	{
 		_Ptmatcher = matcher;
 		_imgNum = _Ptmatcher->_imgSizeList.size();
 		_shotNum = _attempNum = 0;
 		_totalTime = _matchTime = 0;
 		_isInOrder = false;
+		_outputDir = outputDir;
 	};
 	~TopoFinder(){};
 
@@ -75,7 +76,7 @@ public:
 	//! X1 = Model * X2
 	Mat_<double> findFastAffine(vector<Point2d> pointSet1, vector<Point2d> pointSet2);
 	void loadKeyFiles();
-	bool featureMatcher(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2);
+	// bool featureMatcher(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2);
 	int calSimilarNum(int imgIndex1, int imgIndex2);
 	//! temperate functions
 	void drawTopoNet();
@@ -99,4 +100,5 @@ private:
 	//! variables for efficiency analysis
 	int _attempNum, _shotNum;
 	int _totalTime, _matchTime;
+	std::string _outputDir; 
 };

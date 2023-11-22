@@ -4,14 +4,13 @@
 //-------------------------------------------------alignment order
 void ImageAligner::sortImageOrder(int referNo, bool shallLoad, bool isInorder)
 {
-	cout<< "#Finding topology ..." << endl;
-	TopoFinder topoBar(_matcher);
+	cout<< "Finding topology ..." << endl;
+	TopoFinder topoBar(_matcher, _outputDir);
 
 	_similarityMat = topoBar.findTopology(shallLoad, isInorder);
 	Mat_<double> costGraph = Utils::buildCostGraph(_similarityMat);
-	cout<<"-Completed"<<endl;
 
-	cout<<"#Graph analysis for aligning order ..."<<endl;
+	cout<<"Graph analysis for aligning order ..."<<endl;
 	if (referNo == -1)
 	{
 		_visitOrder = Graph::FloydForPath(costGraph);
@@ -22,8 +21,7 @@ void ImageAligner::sortImageOrder(int referNo, bool shallLoad, bool isInorder)
 		_visitOrder = Graph::DijkstraForPath(costGraph, referNo);
 		_refImgNo = _visitOrder[0].imgNo;
 	}
-	cout<<"Image "<<_refImgNo<<" become the reference frame."<<endl;
-	cout<<"-Completed"<<endl;
+	cout<<"Sorted image order: image "<<_refImgNo<<" become the reference frame."<<endl;
 
 	divideImageGroups();
 }
@@ -55,7 +53,7 @@ void ImageAligner::divideImageGroups()
 void ImageAligner::imageStitcherbyGroup(int referNo)
 {
 	//! =============== extract features ===============
-	_matcher = new PointMatcher(_filePathList);
+	_matcher = new PointMatcher(_filePathList, _outputDir);
 	_imgSizeList = _matcher->_imgSizeList;
 
 	//! =============== Topology sorting ===============
@@ -97,23 +95,21 @@ void ImageAligner::imageStitcherbyGroup(int referNo)
 		{
 			bundleAdjustinga(1, eIndex);
 			sIndex = 0;
-			RefineAligningModels(sIndex, eIndex);
+			// RefineAligningModels(sIndex, eIndex);
 		}
 	}
-	cout<<"-Completed!"<<endl;
 //	labelGroupNodes();
 	saveModelParams();
-	drawTopologyNet();
-	outputPrecise();
+	// drawTopologyNet();
+	// outputPrecise();
 	saveMosaicImageP();
-	cout<<"== Mosaic completed successfully!\n";
 }
 
 
 void ImageAligner::imageStitcherbySolos(int referNo)
 {
 	//! =============== extract features ===============
-	_matcher = new PointMatcher(_filePathList);
+	_matcher = new PointMatcher(_filePathList, _outputDir);
 	_imgSizeList = _matcher->_imgSizeList;
 	//! =============== Topology sorting ===============
 	bool shallLoad = false, isInOrder = true;     //! ### set this for new data
@@ -153,8 +149,8 @@ void ImageAligner::imageStitcherbySolos(int referNo)
 	}
 
 	cout<<"-Completed!"<<endl;
-	drawTopologyNet();
-	outputPrecise();
+	// drawTopologyNet();
+	// outputPrecise();
 	saveModelParams();
 	saveMosaicImageP();
 	cout<<"== Mosaic completed successfully!\n";
@@ -163,7 +159,7 @@ void ImageAligner::imageStitcherbySolos(int referNo)
 
 void ImageAligner::fillImageMatchNet()
 {
-	cout<<"#Loading topology matching data ..."<<endl;
+	cout<<"Loading topology matching data ..."<<endl;
 	//!initialization
 	for (int i = 0; i < _imgNum; i ++)
 	{
@@ -173,9 +169,9 @@ void ImageAligner::fillImageMatchNet()
 	}
 	int sum = 0;
 	//! fill matching data
-	for (int i = 0; i < _imgNum-1; i ++)
+	for (int i = 0; i < _imgNum - 1; i++)
 	{
-		for (int j = i+1; j < _imgNum; j ++)
+		for (int j = i + 1; j < _imgNum; j++)
 		{
 			int PtNum = _similarityMat(i,j);
 			if (PtNum == 0)
@@ -183,7 +179,7 @@ void ImageAligner::fillImageMatchNet()
 				continue;
 			}
 			vector<Point2d> PtSet1, PtSet2;
-			if (!Utils::loadMatchPts(i,j,PtSet1,PtSet2))
+			if (!_matcher->loadMatchPts(i,j,PtSet1,PtSet2))
 			{
 				continue;
 			}
@@ -337,7 +333,7 @@ void ImageAligner::solveGroupModelsS(int sIndex, int eIndex)
 			//! case 1 : aligning with aligned image
 			if (neigIndex < sIndex)
 			{
-				for (int t = 0; t < neigRelatedNos.size(); t ++)
+				for (int t = 0; t < neigRelatedNos.size(); t++)
 				{
 					if (neigRelatedNos[t] == i)
 					{
@@ -346,6 +342,7 @@ void ImageAligner::solveGroupModelsS(int sIndex, int eIndex)
 						break;
 					}
 				}
+
 				int fillPos = 4*(i-sIndex);
 				for (int k = 0; k < curPts.size(); k ++)
 				{
@@ -367,6 +364,7 @@ void ImageAligner::solveGroupModelsS(int sIndex, int eIndex)
 						break;
 					}
 				}
+
 				int fillPos1 = 4*(i-sIndex), fillPos2 = 4*(neigIndex-sIndex);
 				for (int k = 0; k < curPts.size(); k ++)
 				{
@@ -385,14 +383,12 @@ void ImageAligner::solveGroupModelsS(int sIndex, int eIndex)
 
 	for (int i = 0; i < paramNum; i += 4)
 	{
-		Mat_<double> affineModel = (Mat_<double>(3,3) << X(i)  , -X(i+1), X(i+2),
-			                                             X(i+1), X(i), X(i+3),
+		// force area preserving similarity transform 
+		double scaleFactor = std::sqrt(X(i)*X(i) + X(i+1)*X(i+1));
+		
+		Mat_<double> affineModel = (Mat_<double>(3,3) << X(i)   / scaleFactor, -X(i+1) / scaleFactor, X(i+2),
+			                                             X(i+1) / scaleFactor,  X(i)   / scaleFactor, X(i+3),
 			                                             0,      0,     1);
-		// std::cout << "affineModel before:\n" << affineModel << std::endl;
-		// double blah = (0.2 * cv::determinant(affineModel) + 0.8);
-		// affineModel = affineModel / blah;
-		// std::cout << "blah is:" << blah << std::endl;
-		// std::cout << "affineModel after:\n" << affineModel << std::endl;
 
 		//		cout<<modelParam<<endl;
 		_alignModelList.push_back(affineModel);
@@ -915,6 +911,7 @@ void ImageAligner::bundleAdjustinga(int sIndex, int eIndex)
 		Mat_<double> AtL = Mat(paramNum, 1, CV_64FC1, Scalar(0));
 		for (int i = sIndex; i <= eIndex; i ++)
 		{
+			std::cout << "Bundle adjusting index " << i << " / " << eIndex << " " << _outputDir << std::endl;
 			//! prepare relative data or parameters of current image
 			int imgNo = _visitOrder[i].imgNo;
 			vector<vector<Point2d> > pointSet = _matchNetList[imgNo].PointSet;
@@ -1596,13 +1593,9 @@ void ImageAligner::saveMosaicImageP()
 		// imwrite(savePath, warpedImage);
 	}
 
-	if (0)
-	{
-		rectangle(stitchImage, Point2d(refRect.x,refRect.y), Point2d(refRect.x+refRect.width,refRect.y+refRect.height), Scalar(0,0,255), 5);
-	}
-	string filePath = Utils::baseDir + "/mosaic.png";
+	string filePath = _outputDir + "/mosaic.png";
 	imwrite(filePath, stitchImage);
-	cout<<"-Completed!"<<endl;
+	cout << "Completed saving mosaic " << _outputDir << endl;
 }
 
 
@@ -1782,7 +1775,7 @@ void ImageAligner::drawTopologyNet()
 		Point2i endPt = dotPtList[refIndex];
 		line(displayPlane, startPt, endPt, Scalar(0,0,255), 3);
 	}
-	string savePath = Utils::baseDir + "/finalTopology.png";
+	string savePath = _outputDir + "/finalTopology.png";
 	imwrite(savePath, displayPlane);
 	cout<<"#the topology graph of images is saved!"<<endl;
 }
@@ -1888,7 +1881,7 @@ void ImageAligner::labelGroupNodes()
 		Point2i endPt = dotPtList[refIndex];
 		line(displayPlane, startPt, endPt, Scalar(0,0,255), 2);
 	}
-	string savePath = Utils::baseDir + "/groupLabel.jpg";
+	string savePath = _outputDir + "/groupLabel.jpg";
 	imwrite(savePath, displayPlane);
 }
 
@@ -1972,7 +1965,7 @@ void ImageAligner::drawSimilarMatrix()
 			}
 		}
 	}
-	string savePath = Utils::baseDir + "/similarTable.jpg";
+	string savePath = _outputDir + "/similarTable.jpg";
 	imwrite(savePath, displayPlane);
 	cout<<"the similarity table of images is saved!"<<endl;
 }
@@ -2029,7 +2022,7 @@ void ImageAligner::outputPrecise()
 	meanBias /= cnt;
 
 	//! statistic the distribute of error
-	string savePath = Utils::baseDir + "/precise.txt";
+	string savePath = _outputDir + "/precise.txt";
 	ofstream fout(savePath, ios::out);
 	if (!fout.is_open())
 	{
@@ -2064,7 +2057,7 @@ void ImageAligner::outputPrecise()
 void ImageAligner::saveModelParams()
 {
 	cout<<"#Save aligning model params ..."<<endl;
-	string savePath = Utils::baseDir + "/modelParmas.txt";
+	string savePath = _outputDir + "/modelParmas.txt";
 	ofstream fout(savePath, ios::out);
 	if (!fout.is_open())
 	{
@@ -2089,7 +2082,7 @@ void ImageAligner::saveModelParams()
 void ImageAligner::loadHomographies()
 {
 	cout<<"#Load aligning model params ..."<<endl;
-	string filePath = Utils::baseDir + "/modelParmas.txt";
+	string filePath = _outputDir + "/modelParmas.txt";
 	ifstream fin(filePath, ios::in);
 	if (!fin.is_open())
 	{

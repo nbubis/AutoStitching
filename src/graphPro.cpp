@@ -222,7 +222,7 @@ vector<TreeNode> Graph::traverseBreadthFirst(Mat_<int> path, int rootNo)
 				}
 			}
 		}
-		if (visitOrder.size() == nodeNum)
+		if (visitOrder.size() == nodeNum || headers.size() == 0)
 		{
 			break;
 		}
