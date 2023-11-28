@@ -1,7 +1,18 @@
 #include "alignment.h"
 #include <omp.h>
+#include <numeric>
+#include <execution>
 
-//-------------------------------------------------alignment order
+
+ImageAligner::ImageAligner(PointMatcher & pointMatcher, std::string outputDir) : 
+	_matcher(pointMatcher)
+{
+	_imgNum = pointMatcher.imgNum();
+	_imgSizeList = _matcher.imgSizeList();
+	_refImgNo = 0;
+	_outputDir = outputDir;
+};
+
 void ImageAligner::sortImageOrder(int referNo, bool shallLoad, bool isInorder)
 {
 	cout<< "Finding topology ..." << endl;
@@ -35,7 +46,7 @@ void ImageAligner::divideImageGroups()
 	int offset = OPT_GROUP_NUM;
 	for (int imgIndex = offset; imgIndex < _imgNum; imgIndex += offset)
 	{
-		if (_imgNum-imgIndex < offset/2)
+		if (_imgNum - imgIndex < offset/2)
 		{
 			imgIndex = _imgNum-1;
 		}
@@ -52,18 +63,11 @@ void ImageAligner::divideImageGroups()
 //-------------------------------------------------alignment
 void ImageAligner::imageStitcherbyGroup(int referNo)
 {
-	//! =============== extract features ===============
-	_matcher = new PointMatcher(_filePathList, _outputDir);
-	_imgSizeList = _matcher->_imgSizeList;
 
-	//! =============== Topology sorting ===============
 	bool shallLoad = false, isInOrder = false;     //! ### set this for new data
 	sortImageOrder(referNo, shallLoad, isInOrder);
-
-	//! =============== build match net ===============
 	fillImageMatchNet();
 
-//	loadHomographies();
 	cout<<"#Sequential image alignment start ..."<<endl;
 	Mat_<double> identMatrix = Mat::eye(3,3,CV_64FC1);     //cvtMatrix of reference image
 	_alignModelList.push_back(identMatrix);
@@ -72,7 +76,7 @@ void ImageAligner::imageStitcherbyGroup(int referNo)
 	bar.imgSize = _imgSizeList[_visitOrder[0].imgNo];
 	bar.centroid = Point2d(bar.imgSize.width/2, bar.imgSize.height/2);
 	_projCoordSet.push_back(bar);
-	for (int i = 1; i < _groupCusorList.size(); i ++)
+	for (int i = 1; i < _groupCusorList.size(); i++)
 	{
 		int sIndex = _groupCusorList[i-1]+1;
 		int eIndex = _groupCusorList[i];
@@ -94,7 +98,7 @@ void ImageAligner::imageStitcherbyGroup(int referNo)
 		if (needRefine && i == _groupCusorList.size()-1)
 		{
 			bundleAdjustinga(1, eIndex);
-			sIndex = 0;
+			// sIndex = 0;
 			// RefineAligningModels(sIndex, eIndex);
 		}
 	}
@@ -109,8 +113,8 @@ void ImageAligner::imageStitcherbyGroup(int referNo)
 void ImageAligner::imageStitcherbySolos(int referNo)
 {
 	//! =============== extract features ===============
-	_matcher = new PointMatcher(_filePathList, _outputDir);
-	_imgSizeList = _matcher->_imgSizeList;
+	// _matcher = new PointMatcher(_filePathList, _outputDir);
+	// _imgSizeList = _matcher->_imgSizeList;
 	//! =============== Topology sorting ===============
 	bool shallLoad = false, isInOrder = true;     //! ### set this for new data
 	sortImageOrder(referNo, shallLoad, isInOrder);
@@ -161,7 +165,7 @@ void ImageAligner::fillImageMatchNet()
 {
 	cout<<"Loading topology matching data ..."<<endl;
 	//!initialization
-	for (int i = 0; i < _imgNum; i ++)
+	for (int i = 0; i < _imgNum; i++)
 	{
 		Match_Net curBar;
 		curBar.imgNo = i;
@@ -179,11 +183,15 @@ void ImageAligner::fillImageMatchNet()
 				continue;
 			}
 			vector<Point2d> PtSet1, PtSet2;
-			if (!_matcher->loadMatchPts(i,j,PtSet1,PtSet2))
+			if (!_matcher.matches(i,j))
 			{
 				continue;
 			}
-			sum += PtSet1.size();
+			sum += _matcher.matches()[i][j].size();
+			for (auto pair : _matcher.matches()[i][j]) {
+				PtSet1.push_back(pair.first);
+				PtSet2.push_back(pair.second);
+			}
 			int indexj = findVisitIndex(j);
 			_matchNetList[i].relatedImgs.push_back(indexj);
 			_matchNetList[i].PointSet.push_back(PtSet1);
@@ -296,7 +304,7 @@ void ImageAligner::solveGroupModels(int sIndex, int eIndex)
 void ImageAligner::solveGroupModelsS(int sIndex, int eIndex)
 {
 	int measureNum = 0;
-	for (int i = sIndex; i <= eIndex; i ++)
+	for (int i = sIndex; i <= eIndex; i++)
 	{
 		int imgNo = _visitOrder[i].imgNo;
 		vector<vector<Point2d> > pointSet = _matchNetList[imgNo].PointSet;
@@ -909,9 +917,14 @@ void ImageAligner::bundleAdjustinga(int sIndex, int eIndex)
 		rn = 0;
 		Mat_<double> AtA = Mat(paramNum, paramNum, CV_64FC1, Scalar(0));
 		Mat_<double> AtL = Mat(paramNum, 1, CV_64FC1, Scalar(0));
-		for (int i = sIndex; i <= eIndex; i ++)
-		{
+
+  		std::vector<int> ivec(eIndex - sIndex + 1);
+  		std::iota(ivec.begin(), ivec.end(), sIndex);
+
+		std::for_each(std::execution::par_unseq, ivec.begin(), ivec.end(), [&](auto i) {
+
 			std::cout << "Bundle adjusting index " << i << " / " << eIndex << " " << _outputDir << std::endl;
+
 			//! prepare relative data or parameters of current image
 			int imgNo = _visitOrder[i].imgNo;
 			vector<vector<Point2d> > pointSet = _matchNetList[imgNo].PointSet;
@@ -1049,7 +1062,8 @@ void ImageAligner::bundleAdjustinga(int sIndex, int eIndex)
 				AtA += barA;
 				AtL += barL;
 			}
-		}
+		});
+
 		meanBias = meanBias/rn;
 		cout<<"Iteration: "<<ite<<" with cost: "<<meanBias<<endl;
 		Mat_<double> dX = AtA.inv()*AtL;
@@ -1667,7 +1681,8 @@ void ImageAligner::recheckTopology(int sIndex, int eIndex)
 				continue;
 			}
 			vector<Point2d> PtSet1, PtSet2;
-			bool yeah = _matcher->featureMatcher(curNo,testNo,PtSet1,PtSet2);
+			// bool yeah = _matcher->featureMatcher(curNo,testNo,PtSet1,PtSet2);
+			bool yeah = false;
 			if (yeah)
 			{
 				_similarityMat(testNo,curNo) = PtSet1.size();

@@ -13,9 +13,14 @@ RUN wget https://users.ics.forth.gr/~lourakis/levmar/levmar-2.6.tgz &&\
     tar -xf levmar-2.6.tgz &&\
     mkdir -p ${BASE_DIRECTORY}/levmar-2.6/build 
 
+
 WORKDIR ${BASE_DIRECTORY}/levmar-2.6/build
 
-RUN cmake ../ -DCMAKE_CXX_STANDARD_LIBRARIES="-lm" -D BUILD_DEMO=FALSE &&\
+# Ensure levmar works well with threading
+RUN sed -i 's/LINSOLVERS_RETAIN_MEMORY 1/LINSOLVERS_RETAIN_MEMORY 0/g' ../CMakeLists.txt &&\
+    sed -i 's$#define LINSOLVERS_RETAIN_MEMORY$//#define LINSOLVERS_RETAIN_MEMORY$g' ../levmar.h
+
+RUN cmake ../ -DCMAKE_CXX_STANDARD_LIBRARIES="-lm" -D BUILD_DEMO=FALSE -DLINSOLVERS_RETAIN_MEMORY=0 &&\
     make
 
 RUN cp liblevmar.a /usr/local/lib/ &&\

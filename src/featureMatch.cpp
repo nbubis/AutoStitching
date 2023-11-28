@@ -1,189 +1,127 @@
+#include <limits>
+#include <execution>
 #include "featureMatch.h"
 #include "opencv2/features2d.hpp"
 #include "opencv2/xfeatures2d.hpp"
 
+const int PointMatcher::minimumMatches = 30;
+
+PointMatcher::PointMatcher(std::vector<std::string> &imgPathList, int limitImageMatchNum, int resizedWidthForFeatures)
+{
+	if (limitImageMatchNum <= 0)
+	{
+		limitImageMatchNum = _imgNum;
+	}
+
+	_imgPathList = imgPathList;
+	_imgNum = imgPathList.size();
+	_resizedWidthForFeatures = resizedWidthForFeatures;
+	featureExtractor();
+
+	std::vector<int> imageRange(_imgNum);
+	std::iota(imageRange.begin(), imageRange.end(), 0);
+	std::cout << "Matching features ..." << std::endl;
+
+	float percent = 0.0;
+
+	_matches.resize(_imgNum);
+	std::for_each(_matches.begin(), _matches.end(), [&](auto & match_i) {match_i.resize(_imgNum);});
+
+	std::for_each(std::execution::par_unseq, imageRange.begin(), imageRange.end(), [&](auto &i)
+	{
+		for (int j = i + 1; j < std::min(i + limitImageMatchNum + 1, _imgNum); j++) { 
+			featureMatcher(i, j);
+		}
+		percent += 1.0f / (float)_imgNum;
+		Utils::printProgress(percent); 
+	});
+	std::cout << std::endl;
+};
+
+PointMatcher PointMatcher::getSubset(int imgIndex1, int imgIndex2)
+{
+	PointMatcher subset(*this);
+
+	subset._imgNum = imgIndex2 - imgIndex1;
+	subset._resizedWidthForFeatures = _resizedWidthForFeatures;
+	subset._imgPathList = {_imgPathList.begin() + imgIndex1, _imgPathList.begin() + imgIndex2};
+	subset._imgSizeList = {_imgSizeList.begin() + imgIndex1, _imgSizeList.begin() + imgIndex2};
+	subset._keyPts = {_keyPts.begin() + imgIndex1, _keyPts.begin() + imgIndex2};
+	subset._descriptors = {_descriptors.begin() + imgIndex1, _descriptors.begin() + imgIndex2};
+	subset._matches = {_matches.begin() + imgIndex1, _matches.begin() + imgIndex2};
+
+	return subset;
+};
 
 void PointMatcher::featureExtractor()
 {
-	int i, j;
+	// descriptor_extractor->descriptorSize() << " Type: " << descriptor_extractor->descriptorType()
+	cv::Ptr<cv::xfeatures2d::SURF> detector = cv::xfeatures2d::SURF::create(400);
+	_keyPts.resize(_imgNum);
+	_imgSizeList.resize(_imgNum);
+	_descriptors.resize(_imgNum);
 
-    Ptr<cv::xfeatures2d::SURF> detector = cv::xfeatures2d::SURF::create(400);
-    
-	for (i = 0; i < _imgNum; i ++)
-	{
-		string imgPath = _imgNameList[i];
-		Mat image = imread(imgPath);
+	std::cout << "Reading images and extracting features ..." << std::endl;
 
-		Size imgSize(image.cols, image.rows);
-		_imgSizeList.push_back(imgSize);
+	float percent = 0.0f;
+	std::for_each(std::execution::par_unseq, _imgPathList.begin(), _imgPathList.end(), [&](auto &imgName) {
 
-		vector<KeyPoint> keyPts;
-		Mat descriptors;
+		cv::Mat image = cv::imread(imgName);
 
-        detector->detectAndCompute(image, noArray(), keyPts, descriptors);
-
-		int imgIndex = i;
-		char saveName[1024];
-		sprintf(saveName, "/cache/keyPtfile/keys%d", imgIndex);
-		string saveName_ = _outputDir + string(saveName);
-		_keysFileList.push_back(saveName_);
-		savefeatures(keyPts, descriptors, saveName_);
-		cout << imgIndex << " keyPoint file saved!" << endl;
-	}
-	saveImgSizeList();
-}
-
-
-void PointMatcher::savefeatures(vector<KeyPoint> keyPts, Mat descriptors, string saveName)
-{
-	FILE *fout;
-	fout = fopen(saveName.c_str(), "w");
-
-	int PtNum = keyPts.size();
-	fprintf(fout, "%d\n", PtNum);
-	unsigned i, j;
-//	int n0 = 0, n1 = 0, n2 = 0, n3 = 0;
-	for (i = 0; i < PtNum; i ++)
-	{
-		Point2d point = keyPts[i].pt;
-		int octave = keyPts[i].octave;
-		fprintf(fout, "%.8lf %.8lf %d\n", point.x, point.y, octave);
-		//if (octave == 0)
-		//{
-		//	n0 ++;
-		//}
-		//else if (octave == 1)
-		//{
-		//	n1 ++;
-		//}
-		//else if (octave == 2)
-		//{
-		//	n2 ++;
-		//}
-		//else
-		//{
-		//	n3 ++;
-		//}
-	}
-	//int nn = n0+n1+n2+n3;
-	//cout<<n0*1.0/nn<<" "<<n1*1.0/nn<<" "<<n2*1.0/nn<<" "<<n3*1.0/nn<<"  from "<<nn<<endl;
-	for (i = 0; i < PtNum; i ++)        //write feature descriptor data
-	{
-		for (j = 0; j < featureDimension; j ++)
-		{
-			float temp = descriptors.at<float>(i,j);
-			fprintf(fout, "%.8f ", temp);
+		if (_resizedWidthForFeatures > 0) {
+			cv::resize(image, image, cv::Size(_resizedWidthForFeatures, int(image.rows * _resizedWidthForFeatures / image.cols)));
 		}
-		fprintf(fout, "\n");
-	}
-	fclose(fout);
+
+		std::vector<cv::KeyPoint> keyPts;
+		cv::Mat descriptors;
+
+		detector->detectAndCompute(image, cv::noArray(), keyPts, descriptors);
+
+		int i = &imgName - &_imgPathList[0];
+		_keyPts[i] = keyPts;
+		_descriptors[i] = descriptors;
+		_imgSizeList[i] = image.size();
+		percent += 1.0f / (float)_imgNum;
+		Utils::printProgress(percent); 
+	});
+	std::cout << std::endl;
 }
- 
 
-void PointMatcher::readfeatures(int imgIndex, vector<Point2d> &keyPts, Mat &descriptors, double ratio)
+void PointMatcher::getfeatures(int imgIndex, std::vector<cv::Point2d> &imageKeyPts, cv::Mat &imageDescriptors, int ratio)
 {
-	string fileName = _keysFileList[imgIndex];
-	FILE *fin = fopen(fileName.c_str(), "r");
-	int PtNum = 0;
-	fscanf(fin, "%d", &PtNum);
-
-	int step = int(1/ratio);
-	int realNum = 0;
-	unsigned i, j;
-	for (i = 0; i < PtNum; i ++)
+	imageKeyPts.clear();
+	imageDescriptors.release();
+	imageDescriptors = cv::Mat(_keyPts[imgIndex].size() / ratio, 64, CV_32FC1, cv::Scalar(0.0f));
+	for (int i = 0; i < _keyPts[imgIndex].size(); i++)
 	{
-		Point2d point;
-		int octave = 0;
-		fscanf(fin, "%lf%lf%d", &point.x, &point.y, &octave);
-		if (i%step == 0)
+		if (i % ratio == 0)
 		{
-			keyPts.push_back(point);
-			realNum++;
+			imageKeyPts.push_back(_keyPts[imgIndex][i].pt);
+			_descriptors[imgIndex].row(i).copyTo(imageDescriptors.row(i / ratio));
 		}
 	}
-	descriptors = Mat(realNum, featureDimension, CV_32FC1, Scalar(0));
-	int cnt = 0;
-	for (i = 0; i < PtNum; i ++)        //write feature descriptor data
-	{
-		if (i%step != 0)
-		{
-			for (j = 0; j < featureDimension; j ++)
-			{
-				float temp;
-				fscanf(fin, "%f", &temp);	
-			}
-		}
-		else
-		{
-			for (j = 0; j < featureDimension; j ++)
-			{
-				float temp;
-				fscanf(fin, "%f", &temp);	
-				descriptors.at<float>(cnt,j) = temp;
-			}
-			cnt++;
-		}
-	}
-	fclose(fin);
 }
 
-
-void PointMatcher::loadImgSizeList()
+bool PointMatcher::featureMatcher(int imgIndex1, int imgIndex2)
 {
-	string filePath = _outputDir + "/cache/imgSizeList.txt";
-	FILE *fin = fopen(filePath.c_str(), "r");
-	if (fin == nullptr)
+	std::vector<cv::Point2d> keyPts1, keyPts2;
+	cv::Mat descriptors1, descriptors2;
+
+	getfeatures(imgIndex1, keyPts1, descriptors1);
+	getfeatures(imgIndex2, keyPts2, descriptors2);
+
+	if (keyPts1.size() < minimumMatches || keyPts2.size() < minimumMatches)
 	{
-		cout<<"No image size file!\n";
-		return;
-	}
-	for (int i = 0; i < _imgNum; i ++)
-	{
-		int width, height;
-		fscanf(fin, "%d  %d\n", &width, &height);
-		_imgSizeList.push_back(Size(width,height));
-	}
-	fclose(fin);
-}
-
-
-void PointMatcher::saveImgSizeList()
-{
-	string savePath = _outputDir + "/cache/imgSizeList.txt";
-	FILE *fout = fopen(savePath.c_str(), "w");
-	for (int i = 0; i < _imgNum; i ++)
-	{
-		int width = _imgSizeList[i].width, height = _imgSizeList[i].height;
-		fprintf(fout, "%d  %d\n", width, height);
-	}
-	fclose(fout);
-}
-
-
-bool PointMatcher::featureMatcher(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2)
-{
-	pointSet1.clear();
-	pointSet2.clear();
-	vector<Point2d> keyPts1, keyPts2;
-	Mat descriptors1, descriptors2;
-	readfeatures(imgIndex1, keyPts1, descriptors1, 1.0);
-	readfeatures(imgIndex2, keyPts2, descriptors2, 1.0);
-
-	// Matching descriptor vectors using FLANN matcher
-	vector<DMatch> m_Matches;
-	FlannBasedMatcher matcher; 
-	vector<vector<DMatch>> knnmatches;
-	int num1 = keyPts1.size(), num2 = keyPts2.size();
-
-	if (num1 < 5 || num2 < 5) {
 		return false;
 	}
 
-	matcher.knnMatch(descriptors1, descriptors2, knnmatches, 5);   
+	cv::FlannBasedMatcher matcher;
+	std::vector<std::vector<cv::DMatch>> knnmatches;
 
-	int i, j;
-	double minimalDistance = 99999;
-	for (i = 0; i < knnmatches.size(); i ++)
+	matcher.knnMatch(descriptors1, descriptors2, knnmatches, 5);
+
+	double minimalDistance = std::numeric_limits<double>::max();
+	for (int i = 0; i < knnmatches.size(); i++)
 	{
 		double dist = knnmatches[i][1].distance;
 		if (dist < minimalDistance)
@@ -191,12 +129,15 @@ bool PointMatcher::featureMatcher(int imgIndex1, int imgIndex2, vector<Point2d> 
 			minimalDistance = dist;
 		}
 	}
+
 	double fitedThreshold = minimalDistance * 5;
 	int keypointsize = knnmatches.size();
-	for (i = 0; i < keypointsize; i ++)
-	{  
-		const DMatch nearDist1 = knnmatches[i][0];
-		const DMatch nearDist2 = knnmatches[i][1];
+	std::vector<cv::DMatch> m_Matches;
+
+	for (int i = 0; i < keypointsize; i++)
+	{
+		const cv::DMatch nearDist1 = knnmatches[i][0];
+		const cv::DMatch nearDist2 = knnmatches[i][1];
 		double distanceRatio = nearDist1.distance / nearDist2.distance;
 		if (nearDist1.distance < fitedThreshold && distanceRatio < 0.8)
 		{
@@ -204,29 +145,31 @@ bool PointMatcher::featureMatcher(int imgIndex1, int imgIndex2, vector<Point2d> 
 		}
 	}
 
-	vector<Point2d> iniPts1, iniPts2;
-	for (i = 0; i < m_Matches.size(); i ++)   //get initial match pairs
+	std::vector<cv::Point2d> iniPts1, iniPts2;
+	for (int i = 0; i < m_Matches.size(); i++) // get initial match pairs
 	{
 		int queryIndex = m_Matches[i].queryIdx;
 		int trainIndex = m_Matches[i].trainIdx;
-		Point2d tempPt1 = keyPts1[queryIndex];
-		Point2d tempPt2 = keyPts2[trainIndex];
+		cv::Point2d tempPt1 = keyPts1[queryIndex];
+		cv::Point2d tempPt2 = keyPts2[trainIndex];
 		iniPts1.push_back(tempPt1);
 		iniPts2.push_back(tempPt2);
 	}
-	if (iniPts1.size() < 10)
+	if (iniPts1.size() < minimumMatches)
 	{
 		return false;
 	}
 
-	vector<uchar> status;
-	//! utilize epi-polar geometry constraints to delete missing matches
-	Mat Fmatrix = findFundamentalMat(iniPts1, iniPts2, RANSAC, 1.5, 0.99, status);
-	if (Fmatrix.empty()) {
-		cout << "Empty fundamental matrix" << endl;
+	std::vector<uchar> status;
+	cv::Mat Fmatrix = cv::findFundamentalMat(iniPts1, iniPts2, cv::RANSAC, 1.5, 0.99, status);
+	if (Fmatrix.empty())
+	{
 		return false;
 	}
-	for (i = 0; i < status.size(); i ++)
+
+	std::vector<cv::Point2d> pointSet1, pointSet2;
+
+	for (int i = 0; i < status.size(); i++)
 	{
 		if (status[i] == 1)
 		{
@@ -234,262 +177,165 @@ bool PointMatcher::featureMatcher(int imgIndex1, int imgIndex2, vector<Point2d> 
 			pointSet2.push_back(iniPts2[i]);
 		}
 	}
-	if (pointSet1.size() < 10)
+	if (pointSet1.size() < minimumMatches)
 	{
 		return false;
 	}
 
-	// cout<<"Image "<<imgIndex1<<" and image "<<imgIndex2<<" initially matched "<<iniPts2.size()<<" points"<<endl;
-
-	Mat homoMat = findHomography(iniPts2, iniPts1, RANSAC, 2.5);    //! Pt1 = homoMat*Pt2
-	if (homoMat.empty()) {
-		cout << "Empty Homography" << endl;
+	cv::Mat homography = findHomography(pointSet1, pointSet2, cv::RANSAC, 2.5);
+	if (homography.empty())
+	{
 		return false;
 	}
-	vector<Point2d> goodPts1, goodPts2;
-	for (i = 0; i < pointSet1.size(); i ++)    //mean value
+	std::vector<cv::Point2d> goodPts1, goodPts2, warpedPoints;
+
+	cv::perspectiveTransform(pointSet1, warpedPoints, homography);
+
+	for (int i = 0; i < pointSet1.size(); i++)
 	{
-		Point2d warpedPt;
-		Utils::pointTransform(homoMat, pointSet2[i], warpedPt);
-		double dist = 0;
-		dist = sqrt((warpedPt.x-pointSet1[i].x)*(warpedPt.x-pointSet1[i].x) + (warpedPt.y-pointSet1[i].y)*(warpedPt.y-pointSet1[i].y));
-		if (dist < 3.0)
+		if (cv::norm(warpedPoints[i] - pointSet2[i]) < 3.0)
 		{
 			goodPts1.push_back(pointSet1[i]);
 			goodPts2.push_back(pointSet2[i]);
 		}
 	}
-	// cout<<"Good point matches "<< goodPts1.size() << endl;
 
 	pointSet1 = goodPts1;
 	pointSet2 = goodPts2;
-	if (pointSet1.size() < 10)    //! modify as 20
+
+	if (pointSet1.size() < minimumMatches)
 	{
 		return false;
 	}
-	// cout<<"Image "<<imgIndex1<<" and image "<<imgIndex2<<" matched "<<pointSet1.size()<<" points"<<endl;
 
-	////! chouxi
-	//int step = max(1,int(pointSet1.size()/30));
-	//vector<Point2d> set1, set2;
-	//for (int i = 0; i < pointSet1.size(); i += step)
-	//{
-	//	set1.push_back(pointSet1[i]);
-	//	set2.push_back(pointSet2[i]);
-	//}
-	//saveMatchPts(imgIndex1, imgIndex2, set1, set2);
-	//drawMatches(imgIndex1, imgIndex2, set1, set2);
 	saveMatchPts(imgIndex1, imgIndex2, pointSet1, pointSet2);
-//	drawMatches(imgIndex1, imgIndex2, pointSet1, pointSet2);
+
 	return true;
 }
 
-
-void PointMatcher::saveMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> pointSet1, vector<Point2d> pointSet2)
+void PointMatcher::saveMatchPts(int imgIndex1, int imgIndex2, std::vector<cv::Point2d> &pointSet1, std::vector<cv::Point2d> &pointSet2)
 {
-	bool exchanged = false;
-	if (imgIndex1 > imgIndex2)          //set a consistent standard: smaller index in the left
+	std::vector<std::pair<cv::Point2d, cv::Point2d>> matchPairs;
+	if (imgIndex2 > imgIndex1)
 	{
-		int temp = imgIndex2;
-		imgIndex2 = imgIndex1;
-		imgIndex1 = temp;
-		exchanged = true;
-	}
-	char saveName[1024];
-	sprintf(saveName, "/cache/matchPtfile/match%d_%d.txt", imgIndex1, imgIndex2);
-	string savePath = _outputDir + string(saveName);
-	FILE *fout = fopen(savePath.c_str(), "w");
-	int PtNum = pointSet1.size();
-	fprintf(fout, "%d\n", PtNum);
-	if (!exchanged)
-	{
-		for (int i = 0; i < PtNum; i ++)
+		for (int i = 0; i < pointSet1.size(); i++)
 		{
-			double x1 = pointSet1[i].x, y1 = pointSet1[i].y;
-			double x2 = pointSet2[i].x, y2 = pointSet2[i].y;
-			fprintf(fout, "%lf %lf %lf %lf\n", x1, y1, x2, y2);
+			matchPairs.push_back(std::make_pair(pointSet1[i], pointSet2[i]));
 		}
 	}
 	else
 	{
-		for (int i = 0; i < PtNum; i ++)
+		for (int i = 0; i < pointSet1.size(); i++)
 		{
-			double x1 = pointSet1[i].x, y1 = pointSet1[i].y;
-			double x2 = pointSet2[i].x, y2 = pointSet2[i].y;
-			fprintf(fout, "%lf %lf %lf %lf\n", x2, y2, x1, y1);
+			matchPairs.push_back(std::make_pair(pointSet2[i], pointSet1[i]));
 		}
 	}
-	fclose(fout);
-	// cout<<"Matched Points of image "<<imgIndex1<<" & image "<<imgIndex2<<" saved!"<<endl;
+
+	_matches[imgIndex1][imgIndex2] = matchPairs;
 }
 
-
-bool PointMatcher::loadMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2)
+bool PointMatcher::getMatchPoints(int imgIndex1, int imgIndex2, std::vector<cv::Point2d> &pointSet1, std::vector<cv::Point2d> &pointSet2)
 {
-	bool exchanged = false;
-	if (imgIndex1 > imgIndex2)          //set a consistent standard: smaller index in the left
+
+	if (imgIndex2 > imgIndex1)
 	{
-		int temp = imgIndex2;
-		imgIndex2 = imgIndex1;
-		imgIndex1 = temp;
-		exchanged = true;
-	}
-	char fileName[1024];
-	sprintf(fileName, "/cache/matchPtfile/match%d_%d.txt", imgIndex1, imgIndex2);
-	string filePath = _outputDir + string(fileName);
-	FILE *fin = fopen(filePath.c_str(), "r");
-	if (fin == nullptr)
-	{
-		cout<<"invalid matching file of image "<<imgIndex1<<" & image "<<imgIndex2<<endl;
-		return false;
-	}
-	int PtNum = 0;
-	fscanf(fin, "%d", &PtNum);
-	if (!exchanged)
-	{
-		for (int i = 0; i < PtNum; i ++)
+		for (int i = 0; i < _matches[imgIndex1][imgIndex2].size(); i++)
 		{
-			double x1, y1, x2, y2;
-			fscanf(fin, "%lf %lf %lf %lf", &x1, &y1, &x2, &y2);
-			Point2d point1(x1,y1), point2(x2,y2);
-			pointSet1.push_back(point1);
-			pointSet2.push_back(point2);
+			pointSet1.push_back(_matches[imgIndex1][imgIndex2][i].first);
+			pointSet2.push_back(_matches[imgIndex1][imgIndex2][i].second);
 		}
 	}
 	else
 	{
-		for (int i = 0; i < PtNum; i ++)
+		for (int i = 0; i < _matches[imgIndex1][imgIndex2].size(); i++)
 		{
-			double x1, y1, x2, y2;
-			fscanf(fin, "%lf %lf %lf %lf", &x1, &y1, &x2, &y2);
-			Point2d point1(x1,y1), point2(x2,y2);
-			pointSet1.push_back(point2);
-			pointSet2.push_back(point1);
+			pointSet1.push_back(_matches[imgIndex1][imgIndex2][i].second);
+			pointSet2.push_back(_matches[imgIndex1][imgIndex2][i].first);
 		}
 	}
-	fclose(fin);
-	cout<<"Loaded "<<pointSet1.size()<<" points between image "<<imgIndex1<<" and image "<<imgIndex2<<endl;
 	return true;
 }
-
 
 bool PointMatcher::tentativeMatcher(int imgIndex1, int imgIndex2)
 {
-	vector<Point2d> keyPts1, keyPts2;
-	Mat descriptors1, descriptors2;
-	readfeatures(imgIndex1, keyPts1, descriptors1, 0.3);
-	readfeatures(imgIndex2, keyPts2, descriptors2, 0.3);
+	// std::vector<cv::Point2d> keyPts1, keyPts2;
+	// cv::Mat descriptors1, descriptors2;
+	// getfeatures(imgIndex1, keyPts1, descriptors1, 3);
+	// getfeatures(imgIndex2, keyPts2, descriptors2, 3);
 
-	// Matching descriptor vectors using FLANN matcher
-	vector<DMatch> m_Matches;
-	FlannBasedMatcher matcher; 
-	vector<vector<DMatch>> knnmatches;
-	int num1 = keyPts1.size(), num2 = keyPts2.size();
-	int kn = min(min(num1, num2), 5);
-    try {
-	    matcher.knnMatch(descriptors1, descriptors2, knnmatches, kn);   
-    } catch(std::exception const& e){
-    	std::cout<<"Exception: "<< e.what()<<std::endl;
-	}
-	int i, j;
-	double minimaDsit = 99999;
-	for (i = 0; i < knnmatches.size(); i ++)
-	{
-		double dist = knnmatches[i][0].distance;
-		if (dist < minimaDsit)
-		{
-			minimaDsit = dist;
-		}
-	}
-	double fitedThreshold = minimaDsit * 5;
-	int keypointsize = knnmatches.size();
-	for (i = 0; i < keypointsize; i ++)
-	{  
-		const DMatch nearDist1 = knnmatches[i][0];
-		const DMatch nearDist2 = knnmatches[i][1];
-		double distanceRatio = nearDist1.distance / nearDist2.distance;
-		if (nearDist1.distance < fitedThreshold && distanceRatio < 0.7)
-		{
-			m_Matches.push_back(nearDist1);
-		}
-	}
-	vector<Point2d> iniPts1, iniPts2;
-	for (i = 0; i < m_Matches.size(); i ++)   //get initial match pairs
-	{
-		int queryIndex = m_Matches[i].queryIdx;
-		int trainIndex = m_Matches[i].trainIdx;
-		Point2d tempPt1 = keyPts1[queryIndex];
-		Point2d tempPt2 = keyPts2[trainIndex];
-		iniPts1.push_back(tempPt1);
-		iniPts2.push_back(tempPt2);
-	}
-	if (iniPts1.size() < 15)
-	{
-		return false;
-	}
-	Mat_<double> homoMat = findHomography(iniPts1, iniPts2, RANSAC, 5.0);     //initial solution : from image2 to image1
-	vector<Point2d> goodPts1, goodPts2;
-	for (i = 0; i < iniPts1.size(); i ++)    //mean value
-	{
-		Point2d warpedPt;
-		pointConvert(homoMat, iniPts2[i], warpedPt);
-		double dist = 0;
-		dist = sqrt((warpedPt.x-iniPts1[i].x)*(warpedPt.x-iniPts1[i].x) + (warpedPt.y-iniPts1[i].y)*(warpedPt.y-iniPts1[i].y));
-		if (dist < 5.0)
-		{
-			goodPts1.push_back(iniPts1[i]);
-			goodPts2.push_back(iniPts2[i]);
-		}
-	}
-	if (goodPts1.size() < 5)
-	{
-		return false;
-	}
+	// // Matching descriptor vectors using FLANN matcher
+	// vector<DMatch> m_Matches;
+	// FlannBasedMatcher matcher;
+	// vector<vector<DMatch>> knnmatches;
+	// int num1 = keyPts1.size(), num2 = keyPts2.size();
+	// int kn = min(min(num1, num2), 5);
+	// try
+	// {
+	// 	matcher.knnMatch(descriptors1, descriptors2, knnmatches, kn);
+	// }
+	// catch (std::exception const &e)
+	// {
+	// 	std::cout << "Exception: " << e.what() << std::endl;
+	// }
+	// int i, j;
+	// double minimaDsit = 99999;
+	// for (i = 0; i < knnmatches.size(); i++)
+	// {
+	// 	double dist = knnmatches[i][0].distance;
+	// 	if (dist < minimaDsit)
+	// 	{
+	// 		minimaDsit = dist;
+	// 	}
+	// }
+	// double fitedThreshold = minimaDsit * 5;
+	// int keypointsize = knnmatches.size();
+	// for (i = 0; i < keypointsize; i++)
+	// {
+	// 	const DMatch nearDist1 = knnmatches[i][0];
+	// 	const DMatch nearDist2 = knnmatches[i][1];
+	// 	double distanceRatio = nearDist1.distance / nearDist2.distance;
+	// 	if (nearDist1.distance < fitedThreshold && distanceRatio < 0.7)
+	// 	{
+	// 		m_Matches.push_back(nearDist1);
+	// 	}
+	// }
+	// vector<Point2d> iniPts1, iniPts2;
+	// for (i = 0; i < m_Matches.size(); i++) // get initial match pairs
+	// {
+	// 	int queryIndex = m_Matches[i].queryIdx;
+	// 	int trainIndex = m_Matches[i].trainIdx;
+	// 	Point2d tempPt1 = keyPts1[queryIndex];
+	// 	Point2d tempPt2 = keyPts2[trainIndex];
+	// 	iniPts1.push_back(tempPt1);
+	// 	iniPts2.push_back(tempPt2);
+	// }
+	// if (iniPts1.size() < 15)
+	// {
+	// 	return false;
+	// }
+	// Mat_<double> homography = findHomography(iniPts1, iniPts2, RANSAC, 5.0); // initial solution : from image2 to image1
+
+	// if (homography.empty()) {
+	// 	return false;
+	// }
+
+	// vector<Point2d> goodPts1, goodPts2, warpedPoints;
+
+	// cv::perspectiveTransform(iniPts1, warpedPoints, homography);
+
+	// for (int i = 0; i < iniPts1.size(); i++)
+	// {
+	// 	if (cv::norm(warpedPoints[i] - iniPts2[i]) < 5.0)
+	// 	{
+	// 		goodPts1.push_back(iniPts1[i]);
+	// 		goodPts2.push_back(iniPts2[i]);
+	// 	}
+	// }
+
+	// if (goodPts1.size() < 5)
+	// {
+	// 	return false;
+	// }
 
 	return true;
 }
-
-
-void PointMatcher::pointConvert(Mat_<double> homoMat, Point2d src, Point2d &dst)
-{
-	Mat_<double> srcX = (Mat_<double>(3,1)<< src.x, src.y, 1);
-	Mat_<double> dstX = homoMat * srcX;
-	dst = Point2d(dstX(0)/dstX(2), dstX(1)/dstX(2));
-}
-
-
-// void PointMatcher::drawMatches(int imgIndex1, int imgIndex2, vector<Point2d> pointSet1, vector<Point2d> pointSet2)
-// {
-// 	int i, j;
-// 	string fileName1 = _imgNameList[imgIndex1];
-// 	string fileName2 = _imgNameList[imgIndex2];
-// 	Mat image1 = imread(fileName1);
-// 	Mat image2 = imread(fileName2);
-// 	int w = 8;
-
-// 	for (i = 0; i < pointSet1.size(); i ++)
-// 	{
-// 		Point2d tempPt1 = pointSet1[i];
-// 		circle(image1, tempPt1, 3, Scalar(0,0,255), -1);
-
-// 		Point2d tempPt2 = pointSet2[i];
-// 		circle(image2, tempPt2, 3, Scalar(0,0,255), -1);
-
-// /*		char text[100];
-// 		sprintf(text,"%d", i);
-// 		Point2d dotPt(3, 3);
-// 		cv::putText(image1, text, tempPt1+dotPt, 2, 1, Scalar(0,0,0));
-// 		cv::putText(image2, text, tempPt2+dotPt, 2, 1, Scalar(0,0,0));*/
-// 		line(image1, tempPt1, tempPt2, Scalar(0,255,0), 1);
-// 		line(image2, tempPt2, tempPt1, Scalar(0,255,0), 1);
-// 	}
-// 	char name1[512], name2[512];
-// 	static int no = 0;
-// 	sprintf(name1, "match%d_0.jpg", no);
-// 	sprintf(name2, "match%d_1.jpg", no);
-// 	no ++;
-// 	string filePath1 = _outputDir + "/cache/match_map/" + string(name1);
-// 	string filePath2 = _outputDir + "/cache/match_map/" + string(name2);
-// 	imwrite(filePath1, image1);
-// 	imwrite(filePath2, image2);
-// }

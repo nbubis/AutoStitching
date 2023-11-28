@@ -1,4 +1,5 @@
 #pragma once
+
 #include "featureMatch.h"
 #include "graphPro.h"
 #include "topology.h"
@@ -6,8 +7,8 @@
 #include <iostream>
 #include <fstream>
 
-#define PENALTY_COEFF 0.2  //! set for LM only
-#define Lambada       0.2  //! set for BA only
+#define PENALTY_COEFF 0.1  //! set for LM only
+#define Lambada       0.1  //! set for BA only
 #define OPT_GROUP_NUM 30
 #define BKGRNDPIX     255
 #define Need_Mask     1
@@ -39,16 +40,8 @@ struct LMData
 class ImageAligner
 {
 public:
-	ImageAligner(vector<string> filePathList, std::string outputDir)
-	{
-		_filePathList = filePathList;
-		_imgNum = filePathList.size();
-		_refImgNo = 0;
-		_outputDir = outputDir;
-	};
-	~ImageAligner(){};
-
-public:             
+	ImageAligner(PointMatcher & pointMatcher, std::string outputDir);
+        
 	//*** functions for sorting the topological relationship of images ***//
 	void sortImageOrder(int referNo, bool shallLoad, bool isInorder);
 	void divideImageGroups();
@@ -92,7 +85,7 @@ public:
 	void drawSimilarMatrix();
 
 private:
-	PointMatcher *_matcher;
+	PointMatcher _matcher;
 	Mat_<int> _similarityMat;
 	int _refImgNo;
 	int _imgNum;
@@ -101,8 +94,8 @@ private:
 	vector<TreeNode> _visitOrder;            //! aligning order according this stack
 	vector<Quadra> _projCoordSet;            //! same order with "_visitOrder"
 	vector<Match_Net> _matchNetList;         //! matching relation of each image (order agree with image no.)
-	vector<Mat_<double> > _alignModelList;   //! aligning model parameters of each image (order agree with '_visitOrder')
-	vector<Mat_<double> > _initModelList;
+	vector<Mat_<double>> _alignModelList;   //! aligning model parameters of each image (order agree with '_visitOrder')
+	vector<Mat_<double>> _initModelList;
 
 	vector<double> reliabilityList;          //! record the mean square error of the initial affine model of each image
 	vector<string> _filePathList;

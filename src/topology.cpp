@@ -4,27 +4,11 @@
 Mat_<double> TopoFinder::findTopology(bool shallLoad, bool isInOrder)
 {
 	_isInOrder = isInOrder;
-	if (shallLoad)
-	{
-		//! load similarity matrix from disk
-		return loadSimilarityMat();
-	}
+
 	loadKeyFiles();
 	clock_t start_time, end_time;
-	start_time = clock();
 	cout<<"Building similarity table ...\n";
-	// Mat_<int> similarMat = detectSimilarityByGuiding();
 	Mat_<int> similarMat = detectSimilarityOnGlobal();
-	end_time = clock();
-	_totalTime = 1000*(end_time-start_time)/CLOCKS_PER_SEC;   //! ms
-	//! write out 
-	string savePath = _outputDir + "/topoInfor.txt";
-	ofstream fout;
-	fout.open(savePath.c_str(), ios::out);
-	fout<<_shotNum<<"  in  "<<_attempNum<<endl;
-	fout<<_matchTime<<"  of   "<<_totalTime<<endl;
-	fout.close();
-	saveSimilarityMat(similarMat);
 	return similarMat;
 }
 
@@ -36,14 +20,9 @@ Mat_<int> TopoFinder::detectSimilarityOnGlobal()
 	{
 		for (int j = i + 1; j < std::min(i + 4, _imgNum); j++)
 		{		
-			_attempNum ++;
-			vector<Point2d> pointSet1, pointSet2;
-			if (_Ptmatcher->featureMatcher(i,j,pointSet1,pointSet2))
-			{
-				similarMat(i,j) = pointSet1.size();
-				similarMat(j,i) = pointSet1.size();
-				_shotNum ++;
-			}
+			similarMat(i, j) = _matcher.matches()[i][j].size();
+			similarMat(j, i) = _matcher.matches()[i][j].size();
+
 		}
 	}
 	return similarMat;
@@ -68,7 +47,7 @@ Mat_<int> TopoFinder::detectSimilarityByGuiding()
 	Mat_<double> identMatrix = Mat::eye(3,3,CV_64FC1);
 	_affineMatList.push_back(identMatrix);
 	Quadra bar;
-	bar.imgSize = _Ptmatcher->_imgSizeList[_visitOrder0[0].imgNo];
+	bar.imgSize = _matcher.imgSizeList()[_visitOrder0[0].imgNo];
 	bar.centroid = Point2d(bar.imgSize.width/2, bar.imgSize.height/2);
 	_projCoordSet.push_back(bar);
 	cout<<"Detecting potential overlaps ..."<<endl;
@@ -81,7 +60,7 @@ Mat_<int> TopoFinder::detectSimilarityByGuiding()
 		vector<Point2d> pointSet1, pointSet2;
 		clock_t st, et;
 		st = clock();
-		_Ptmatcher->loadMatchPts(refNo, curNo, pointSet1, pointSet2);
+		// _matcher.loadMatchPts(refNo, curNo, pointSet1, pointSet2);
 		et = clock();
 		_matchTime -= (et-st);
 	    Utils::pointTransform(_affineMatList[refIndex], pointSet1);
@@ -90,7 +69,7 @@ Mat_<int> TopoFinder::detectSimilarityByGuiding()
 		_affineMatList.push_back(affineMat);
 		//! record centroid of current image
 		Quadra bar;
-		bar.imgSize = _Ptmatcher->_imgSizeList[curNo];
+		bar.imgSize = _matcher.imgSizeList()[curNo];
 		Point2d centroid(bar.imgSize.width/2.0, bar.imgSize.height/2.0);	
 		bar.centroid = Utils::pointTransform(affineMat, centroid);
 		_projCoordSet.push_back(bar);
@@ -128,8 +107,6 @@ Mat_<double> TopoFinder::getGuidingTable()
 			guidingTable(j,i) = cost;
 		}
 	}
-	saveSimilarityMat(simiMat);
-	cout<<"Done!"<<endl;
 	return guidingTable;
 }
 
@@ -162,9 +139,7 @@ Mat_<double> TopoFinder::getGuidingTableP()
 			}
 		}
 	}
-	cout<<endl;
-	saveSimilarityMat(simiMat);
-	cout<<"Done!"<<endl;
+
 	return guidingTable;
 }
 
@@ -183,41 +158,22 @@ void TopoFinder::buildMainChain()
 		_visitOrder0.push_back(bar1);
 		_visitOrder0.push_back(bar2);
 		vector<Point2d> pointSet1, pointSet2;
-		if (Load_Matches)
-		{
-			_Ptmatcher->loadMatchPts(no1, no1+1, pointSet1, pointSet2);
+
+		for (auto pair : _matcher.matches()[no1][no1 + 1]) {
+			pointSet1.push_back(pair.first);
+			pointSet2.push_back(pair.second);
 		}
-		else
-		{
-			clock_t st, et;
-			st = clock();
-			if (!_Ptmatcher->featureMatcher(no1, no1+1, pointSet1, pointSet2))
-			{
-				cout << no1 << "&" << no1+1 <<"Time consecutive sequence break up!" << endl;
-				throw std::logic_error("no matches");
-			}
-			et = clock();
-			_matchTime += (et-st);
-		}
+
 		_similarityMat(no1, no1+1) = pointSet1.size();
 		_similarityMat(no1+1, no1) = pointSet1.size();
 		_attempMap(no1, no1+1) = 1;
 		_attempMap(no1+1, no1) = 1;
-		if (Load_Matches)
-		{
-			_Ptmatcher->loadMatchPts(no2, no2-1, pointSet1, pointSet2);
-		}
-		else
-		{
-			clock_t st, et;
-			st = clock();
-			if (!_Ptmatcher->featureMatcher(no2, no2-1, pointSet1, pointSet2))
-			{
-				cout<<no2<<"&"<<no2-1<<"Time consecutive sequence break up!"<<endl;
-				throw std::logic_error("no matches");
-			}
-			et = clock();
-			_matchTime += (et-st);
+
+		pointSet1.clear();
+		pointSet2.clear();
+		for (auto pair : _matcher.matches()[no2][no2 - 1]) {
+			pointSet1.push_back(pair.first);
+			pointSet2.push_back(pair.second);
 		}
 		_similarityMat(no2, no2-1) = pointSet1.size();
 		_similarityMat(no2-1, no2) = pointSet1.size();
@@ -229,22 +185,13 @@ void TopoFinder::buildMainChain()
 			if (no1 > 0)
 			{
 				_visitOrder0.push_back(TreeNode(no1-1,no1,0));
-				if (Load_Matches)
-				{
-					_Ptmatcher->loadMatchPts(no1-1, no1, pointSet1, pointSet2);
+				pointSet1.clear();
+				pointSet2.clear();
+				for (auto pair : _matcher.matches()[no1 - 1][no1]) {
+					pointSet1.push_back(pair.first);
+					pointSet2.push_back(pair.second);
 				}
-				else
-				{
-					clock_t st, et;
-					st = clock();
-					if (!_Ptmatcher->featureMatcher(no1-1, no1, pointSet1, pointSet2))
-					{
-						cout<<no1-1<<"&"<<no1<<"Time consecutive sequence break up!"<<endl;
-						throw std::logic_error("no matches");
-					}
-					et = clock();
-					_matchTime += (et-st);
-				}
+
 				_similarityMat(no1-1, no1) = pointSet1.size();
 				_similarityMat(no1, no1-1) = pointSet1.size();
 				_attempMap(no1-1, no1) = 1;
@@ -253,22 +200,14 @@ void TopoFinder::buildMainChain()
 			else if (no2 < _imgNum-1)
 			{
 				_visitOrder0.push_back(TreeNode(no2+1,no2,0));
-				if (Load_Matches)
-				{
-					_Ptmatcher->loadMatchPts(no2+1, no2, pointSet1, pointSet2);
+
+				pointSet1.clear();
+				pointSet2.clear();
+				for (auto pair : _matcher.matches()[no2 + 1][no2]) {
+					pointSet1.push_back(pair.first);
+					pointSet2.push_back(pair.second);
 				}
-				else
-				{
-					clock_t st, et;
-					st = clock();
-					if (!_Ptmatcher->featureMatcher(no2+1, no2, pointSet1, pointSet2))
-					{
-						cout<<no2<<"&"<<no2+1<<"Time consecutive sequence break up!"<<endl;
-						throw std::logic_error("no matches");
-					}
-					et = clock();
-					_matchTime += (et-st);
-				}
+
 				_similarityMat(no2+1, no2) = pointSet1.size();
 				_similarityMat(no2, no2+1) = pointSet1.size();
 				_attempMap(no2+1, no2) = 1;
@@ -313,7 +252,7 @@ void TopoFinder::searchMainChain()
 
 			clock_t st, et;
 			st = clock();
-			bool yeah = _Ptmatcher->featureMatcher(no1,no2,pointSet1,pointSet2);
+			bool yeah = true;//_matcher.featureMatcher(no1,no2,pointSet1,pointSet2);
 			et = clock();
 			_matchTime += (et-st);
 			if (yeah)
@@ -386,7 +325,7 @@ void TopoFinder::detectPotentialOverlap(int curIndex, vector<Point2d> &pointSet1
 		//! for debug test
 		if (Load_Matches)
 		{
-			if (_Ptmatcher->loadMatchPts(testNo,curNo,newPtSet1,newPtSet2))
+			if (true)//_matcher.loadMatchPts(testNo,curNo,newPtSet1,newPtSet2))
 			{
 				_similarityMat(testNo,curNo) = newPtSet1.size();
 				_similarityMat(curNo,testNo) = newPtSet1.size();
@@ -406,7 +345,7 @@ void TopoFinder::detectPotentialOverlap(int curIndex, vector<Point2d> &pointSet1
 			{
 				clock_t st, et;
 				st = clock();
-				bool yeah = _Ptmatcher->featureMatcher(testNo,curNo,newPtSet1,newPtSet2);
+				bool yeah = true;// _matcher.featureMatcher(testNo,curNo,newPtSet1,newPtSet2);
 				et = clock();
 				_matchTime += (et-st);
 				if (yeah)
@@ -425,11 +364,11 @@ void TopoFinder::detectPotentialOverlap(int curIndex, vector<Point2d> &pointSet1
 			}
 			//else
 			//{
-			//	if (_Ptmatcher->tentativeMatcher(testNo,curNo))
+			//	if (_matcher.tentativeMatcher(testNo,curNo))
 			//	{
 			//		clock_t st, et;
 			//		st = clock();
-			//		bool yeah = _Ptmatcher->featureMatcher(testNo,curNo,newPtSet1,newPtSet2);
+			//		bool yeah = _matcher.featureMatcher(testNo,curNo,newPtSet1,newPtSet2);
 			//		et = clock();
 			//		_matchTime += (et-st);
 			//		_similarityMat(testNo,curNo) = newPtSet1.size();
@@ -471,62 +410,6 @@ int TopoFinder::findNodeIndex(int imgNo)
 }
 
 
-Mat_<int> TopoFinder::loadSimilarityMat()
-{
-	string filePath = _outputDir + "/cache/similarityMat.txt";
-	ifstream fin;
-	fin.open(filePath.c_str(), ios::in);
-	if (!fin.is_open())
-	{
-		cout<<"File not found!\n";
-		exit(0);
-	}
-	int nodeNum = _imgNum;
-	Mat_<double> similarityMat = Mat(nodeNum, nodeNum, CV_64FC1, Scalar(0));
-	for (int i = 0; i < nodeNum; i ++)
-	{
-		//! avoid to read repeated data
-		//int offset = sizeof(int)*i;
-		//fin.seekg(offset, ios::cur);
-		for (int j = 0; j < nodeNum; j ++)
-		{
-			int Ptnum = 0;
-			fin>>Ptnum;
-			similarityMat(i,j) = Ptnum;
-		}
-	}
-	fin.close();
-
-	return similarityMat;
-}
-
-
-void TopoFinder::saveSimilarityMat(const Mat_<int> &similarityMat)
-{
-	string savePath = _outputDir + "/cache/similarityMat.txt";
-	std::cout << "savePath: " << savePath << std::endl;
-	ofstream fout;
-	fout.open(savePath.c_str(), ios::out);
-	if (!fout.is_open())
-	{
-		cout<<"Path not exists!\n";
-		exit(0);
-	}
-	int nodeNum = similarityMat.cols;
-//	fout<<fixed<<setprecision(2);
-	for (int i = 0; i < nodeNum; i ++)
-	{
-		for (int j = 0; j < nodeNum; j ++)
-		{
-			int Ptnum = similarityMat(i,j);
-			fout<<setw(4)<<Ptnum<<" ";
-		}
-		fout<<endl;
-	}
-	fout.close();
-}
-
-
 Mat_<double> TopoFinder::findFastAffine(vector<Point2d> pointSet1, vector<Point2d> pointSet2)
 {
 	int step = max(1, int(pointSet1.size()/500));
@@ -563,65 +446,80 @@ Mat_<double> TopoFinder::findFastAffine(vector<Point2d> pointSet1, vector<Point2
 
 void TopoFinder::loadKeyFiles()
 {
-	cout<<"Loading key files ..."<<endl;
-	for (int i = 0; i < _imgNum; i ++)
-	{
-		int imgIndex = i;
-		char filePath[1024];
-		sprintf(filePath, "/cache/keyPtfile/keys%d", imgIndex);
-		string filePath_ = _outputDir + string(filePath);
-		cout<<"key "<<i<<endl;
-		Keys bar;
-		vector<int> subIndexList;    //! features of the target ocatve
+	const int targetOctave = 1; 
 
-		FILE *fin = fopen(filePath_.c_str(), "r");
-		int PtNum = 0;
-		fscanf(fin, "%d", &PtNum);
-		for (int j = 0; j < PtNum; j ++)
-		{
-			Point2d point;
-			int octave = 0;
-			fscanf(fin, "%lf%lf%d", &point.x, &point.y, &octave);
-			bar.pts.push_back(point);
-			if (octave == Target_Octave)
+	for (int i = 0; i < _matcher.keyPts().size(); i++) {
+		Keys bar;
+		std::vector<int> subIndexList;
+		bar.descriptors = _matcher.descriptors()[i];
+
+		for (int j = 0; j < _matcher.keyPts()[i].size(); j++) {
+			bar.pts.push_back(_matcher.keyPts()[i][j].pt);
+			if (_matcher.keyPts()[i][j].octave == targetOctave)
 			{
 				subIndexList.push_back(j);
 			}
 		}
-		if (subIndexList.size() == 0)       //! special case
-		{
-			//cout<<"Waring : the feature subset of image "<<i<<" is empty!"<<endl;
-			for (int j = 0; j < PtNum; j ++)
-			{
-				Point2d point;
-				int octave = 0;
-				fscanf(fin, "%lf%lf%d", &point.x, &point.y, &octave);
-				bar.pts.push_back(point);
-				int Gesus = max(0,Target_Octave-1);
-				if (octave == Gesus)
-				{
-					subIndexList.push_back(j);
-				}
-			}
-		}
-		Mat descriptors = Mat(PtNum, 64, CV_32FC1, Scalar(0));
-		int cnt = 0;
-		for (int j = 0; j < PtNum; j ++)        //write feature descriptor data
-		{
-			for (int k = 0; k < 64; k ++)
-			{
-				float temp;
-				fscanf(fin, "%f", &temp);
-				descriptors.at<float>(j,k) = temp;
-			}
-		}
-		bar.descriptors = descriptors;
-		fclose(fin);
-
 		_keyList.push_back(bar);
 		_subKeyIndexList.push_back(subIndexList);
 	}
-	cout<<"Completed!"<<endl;
+
+
+
+	// cout<<"Loading key files ..."<<endl;
+	// for (int i = 0; i < _imgNum; i ++)
+	// {
+
+	// 	Keys bar;
+	// 	vector<int> subIndexList;    //! features of the target ocatve
+
+	// 	FILE *fin = fopen(filePath_.c_str(), "r");
+	// 	int PtNum = 0;
+	// 	fscanf(fin, "%d", &PtNum);
+	// 	for (int j = 0; j < PtNum; j ++)
+	// 	{
+	// 		Point2d point;
+	// 		int octave = 0;
+	// 		fscanf(fin, "%lf%lf%d", &point.x, &point.y, &octave);
+	// 		bar.pts.push_back(point);
+	// 		if (octave == targetOctave)
+	// 		{
+	// 			subIndexList.push_back(j);
+	// 		}
+	// 	}
+	// 	if (subIndexList.size() == 0)       //! special case
+	// 	{
+	// 		//cout<<"Waring : the feature subset of image "<<i<<" is empty!"<<endl;
+	// 		for (int j = 0; j < PtNum; j ++)
+	// 		{
+	// 			Point2d point;
+	// 			int octave = 0;
+	// 			fscanf(fin, "%lf%lf%d", &point.x, &point.y, &octave);
+	// 			bar.pts.push_back(point);
+	// 			if (octave == 0)
+	// 			{
+	// 				subIndexList.push_back(j);
+	// 			}
+	// 		}
+	// 	}
+	// 	Mat descriptors = Mat(PtNum, 64, CV_32FC1, Scalar(0));
+	// 	int cnt = 0;
+	// 	for (int j = 0; j < PtNum; j ++)        //write feature descriptor data
+	// 	{
+	// 		for (int k = 0; k < 64; k ++)
+	// 		{
+	// 			float temp;
+	// 			fscanf(fin, "%f", &temp);
+	// 			descriptors.at<float>(j,k) = temp;
+	// 		}
+	// 	}
+	// 	bar.descriptors = descriptors;
+	// 	fclose(fin);
+
+		// _keyList.push_back(bar);
+		// _subKeyIndexList.push_back(subIndexList);
+	// }
+	// cout<<"Completed!"<<endl;
 }
 
 
@@ -725,8 +623,8 @@ void TopoFinder::loadKeyFiles()
 // 		return false;
 // 	}
 // 	cout<<"Image "<<imgIndex1<<" and image "<<imgIndex2<<" matched "<<pointSet1.size()<<" points"<<endl;
-// 	_Ptmatcher->saveMatchPts(imgIndex1, imgIndex2, pointSet1, pointSet2);
-// //	_Ptmatcher->drawMatches(imgIndex1, imgIndex2, pointSet1, pointSet2);
+// 	_matcher.saveMatchPts(imgIndex1, imgIndex2, pointSet1, pointSet2);
+// //	_matcher.drawMatches(imgIndex1, imgIndex2, pointSet1, pointSet2);
 // 	return true;
 // }
 
@@ -897,7 +795,7 @@ Rect TopoFinder::TsetImageSize()
 	{
 		Mat_<double> homoMat = _affineMatList[i];
 		int curImgNo = _visitOrder0[i].imgNo;
-		Size imgSize = _Ptmatcher->_imgSizeList[curImgNo];
+		Size imgSize = _matcher.imgSizeList()[curImgNo];
 		int height = imgSize.height, width = imgSize.width;
 		Point2d srcPt00(0,0), srcPt01(width,0), srcPt10(0,height), srcPt11(width,height);
 		Point2d dstPt00, dstPt01, dstPt10, dstPt11;
@@ -947,7 +845,7 @@ void TopoFinder::TsaveMosaicImage()
 		int curImgNo = _visitOrder0[i].imgNo;
 		cout<<"Warping Image: "<<curImgNo<<"..."<<endl;
 		Mat_<double> homoMat = _affineMatList[i];
-		Size imgSize = _Ptmatcher->_imgSizeList[curImgNo];
+		Size imgSize = _matcher.imgSizeList()[curImgNo];
 		int height = imgSize.height, width = imgSize.width;
 		Point2d srcPt00(0,0), srcPt01(width,0), srcPt10(0,height), srcPt11(width,height);
 		Point2d dstPt00, dstPt01, dstPt10, dstPt11;
@@ -971,7 +869,7 @@ void TopoFinder::TsaveMosaicImage()
 		int startY = minY-mosaicRect.y; int endY = startY+maxY-minY;
 		int r, c;
 		Mat warpedImage(newRow, newCol, CV_8UC3, Scalar(BKGRNDPIX,BKGRNDPIX,BKGRNDPIX));
-		string filePath = _Ptmatcher->_imgNameList[curImgNo];
+		string filePath = _matcher.imgPathList()[curImgNo];
 		Mat image = imread(filePath);
 		// cv::resize(image, image, cv::Size(resized_image_width, int(image.rows * resized_image_width / image.cols)));
 

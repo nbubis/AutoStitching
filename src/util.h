@@ -2,12 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
-#include <opencv2/opencv.hpp>
-// #include "opencv2/highgui/highgui.hpp"
-// #include "opencv2/imgproc/imgproc.hpp"
-
-using namespace std;
-using namespace cv;
+#include "opencv2/opencv.hpp"
 
 namespace Utils
 {
@@ -27,14 +22,13 @@ namespace Utils
 		int refNo;       //! parent node no.
 	};
 
-	vector<string> get_filelist(string foldname);
-	Mat_<double> buildCostGraph(const Mat_<int> &similarMat);
-	// bool loadMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2);
-	Point2d pointTransform(Mat_<double> homoMat, Point2d srcPt);
-	void pointTransform(Mat_<double> homoMat, Point2d srcPt, Point2d &dstPt);
-	void pointTransform(Mat_<double> homoMat, vector<Point2d> &pointSet);
-	double calPointDist(Point2d point1, Point2d point2);
-	double calVecDot(Point2d vec1, Point2d vec2);
-	//! convert gray image to pesudo-color image
-	Mat grayToPesudoColor(Mat grayMap);
+	std::vector<std::string> get_filelist(std::string foldname);
+	cv::Mat_<double> buildCostGraph(const cv::Mat_<int> &similarMat);
+	cv::Point2d pointTransform(cv::Mat_<double> homoMat, cv::Point2d srcPt);
+	void pointTransform(cv::Mat_<double> homoMat, cv::Point2d srcPt, cv::Point2d &dstPt);
+	void pointTransform(cv::Mat_<double> homoMat, std::vector<cv::Point2d> &pointSet);
+	double calPointDist(cv::Point2d point1, cv::Point2d point2);
+	double calVecDot(cv::Point2d vec1, cv::Point2d vec2);
+
+	void printProgress(float percent);
 }

@@ -34,5 +34,4 @@ public:
 
 	//! tool functions
 	static vector<TreeNode> traverseBreadthFirst(Mat_<int> path, int rootNo);
-	static void appendix(Mat_<double> dist, int root);
 };

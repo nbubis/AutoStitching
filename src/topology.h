@@ -6,11 +6,9 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/core/core.hpp> 
-// #include "opencv2/nonfree/nonfree.hpp"
 #include <iostream>
 #include <fstream>
 
-#define Target_Octave 1         //! select subset of features for building similarity table
 
 using namespace std;
 using namespace cv;
@@ -45,16 +43,15 @@ struct Keys
 class TopoFinder
 {
 public:
-	TopoFinder(PointMatcher *matcher, std::string outputDir)
+	TopoFinder(PointMatcher & matcher, std::string outputDir) : 
+		_matcher(matcher)
 	{
-		_Ptmatcher = matcher;
-		_imgNum = _Ptmatcher->_imgSizeList.size();
+		_imgNum = _matcher.imgNum();
 		_shotNum = _attempNum = 0;
 		_totalTime = _matchTime = 0;
 		_isInOrder = false;
 		_outputDir = outputDir;
 	};
-	~TopoFinder(){};
 
 public:
 	//! return the topology depicted as a cost/weight table
@@ -94,7 +91,7 @@ private:
 	vector<Mat_<double> > _affineMatList;    //! same order with "_visitOrder0"
 	vector<Mat_<double> > _covMatrixList; 
 	vector<Quadra> _projCoordSet;            //! same order with "_visitOrder0"
-	PointMatcher *_Ptmatcher;
+	PointMatcher _matcher;
 	vector<Keys> _keyList;                   //! same with image no.
 	vector<vector<int> > _subKeyIndexList;   //! subset for building similarity table   
 	//! variables for efficiency analysis

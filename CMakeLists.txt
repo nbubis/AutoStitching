@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 2.8.3)
 set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules ${CMAKE_MODULE_PATH})
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(OpenMP)
 find_package(TBB REQUIRED)
