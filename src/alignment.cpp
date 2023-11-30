@@ -9,6 +9,7 @@ ImageAligner::ImageAligner(PointMatcher & pointMatcher, std::string outputDir) :
 {
 	_imgNum = pointMatcher.imgNum();
 	_imgSizeList = _matcher.imgSizeList();
+	_filePathList = _matcher.imgPathList();
 	_refImgNo = 0;
 	_outputDir = outputDir;
 };
@@ -94,7 +95,7 @@ void ImageAligner::imageStitcherbyGroup(int referNo)
 		cout<<"Done!"<<endl;
 //		recheckTopology(sIndex, eIndex);
 		cout<<endl;
-		bool needRefine = true;
+		bool needRefine = false;
 		if (needRefine && i == _groupCusorList.size()-1)
 		{
 			bundleAdjustinga(1, eIndex);
@@ -102,11 +103,9 @@ void ImageAligner::imageStitcherbyGroup(int referNo)
 			// RefineAligningModels(sIndex, eIndex);
 		}
 	}
-//	labelGroupNodes();
-	saveModelParams();
-	// drawTopologyNet();
+	//	labelGroupNodes();
 	// outputPrecise();
-	saveMosaicImageP();
+	// saveMosaicImageP();
 }
 
 
@@ -155,8 +154,6 @@ void ImageAligner::imageStitcherbySolos(int referNo)
 	cout<<"-Completed!"<<endl;
 	// drawTopologyNet();
 	// outputPrecise();
-	saveModelParams();
-	saveMosaicImageP();
 	cout<<"== Mosaic completed successfully!\n";
 }
 
@@ -923,7 +920,7 @@ void ImageAligner::bundleAdjustinga(int sIndex, int eIndex)
 
 		std::for_each(std::execution::par_unseq, ivec.begin(), ivec.end(), [&](auto i) {
 
-			std::cout << "Bundle adjusting index " << i << " / " << eIndex << " " << _outputDir << std::endl;
+			// std::cout << "Bundle adjusting index " << i << " / " << eIndex << " " << _outputDir << std::endl;
 
 			//! prepare relative data or parameters of current image
 			int imgNo = _visitOrder[i].imgNo;
@@ -1306,16 +1303,16 @@ int ImageAligner::findVisitIndex(int imgNo)
 
 Rect ImageAligner::setImageSize(vector<Point2d> &nodePts)
 {
-	vector<Point2d> marginPtList;
+	std::vector<cv::Point2d> marginPtList;
 	int i, j;
-	for (i = 0; i < _imgNum; i ++)
+	for (i = 0; i < _imgNum; i++)
 	{
-		Mat_<double> homoMat = _alignModelList[i];
+		cv::Mat_<double> homoMat = _alignModelList[i];
 		int curImgNo = _visitOrder[i].imgNo;
-		Size imgSize = _imgSizeList[curImgNo];
+		cv::Size imgSize = _imgSizeList[curImgNo];
 		int height = imgSize.height, width = imgSize.width;
-		Point2d srcPt00(0,0), srcPt01(width,0), srcPt10(0,height), srcPt11(width,height);
-		Point2d dstPt00, dstPt01, dstPt10, dstPt11;
+		cv::Point2d srcPt00(0,0), srcPt01(width,0), srcPt10(0,height), srcPt11(width,height);
+		cv::Point2d dstPt00, dstPt01, dstPt10, dstPt11;
 		Utils::pointTransform(homoMat, srcPt00, dstPt00);
 		Utils::pointTransform(homoMat, srcPt01, dstPt01);
 		Utils::pointTransform(homoMat, srcPt10, dstPt10);
@@ -1357,146 +1354,81 @@ Rect ImageAligner::setImageSize(vector<Point2d> &nodePts)
 }
 
 
-void ImageAligner::saveMosaicImage()
+void ImageAligner::saveMosaicImage(float resizedFactorForMosaic)
 {
-	/*
-	cout<<"#Warping sequential images ..."<<endl;
-	bool needMask = false, needAlpha = false;
-	vector<Point2d> nodePts;
-	Rect mosaicRect = setImageSize(nodePts);
-	int newRow = mosaicRect.height, newCol = mosaicRect.width;
-	int i, j;
-	Rect newImgRect;
-	Mat stitchImage(newRow, newCol, CV_8UC3, Scalar(BKGRNDPIX,BKGRNDPIX,BKGRNDPIX));
-	uchar *mosaicData = (uchar*)stitchImage.data;
-	for (i = 0; i < _imgNum; i ++)
+	std::cout << "Warping images ..." << std::endl;
+
+	std::vector<cv::Point2d> warpedCornersAll;
+
+	auto scaledHomography = [&] (int i, cv::Size imgSize) {
+		int curIndex = findVisitIndex(i);
+		cv::Mat homography = _alignModelList[curIndex].clone();
+        // double homographyScale = (double)imgSize.height / (double)_imgSizeList[i].height / resizedFactorForMosaic;
+		// // homographyScale = 1.0 / homographyScale;
+		// homography.at<double>(0, 2) /= homographyScale;
+		// homography.at<double>(1, 2) /= homographyScale;
+		// homography.at<double>(2, 0) *= homographyScale;
+		// homography.at<double>(2, 0) *= homographyScale;
+		return homography;
+    };
+
+	for (int i = 0; i < _imgNum; i++)
 	{
-		int curImgNo = _visitOrder[i].imgNo;
-		cout<<"Warping Image: "<<curImgNo<<"..."<<endl;
-		Mat_<double> homoMat = _alignModelList[i];
-		Size imgSize = _imgSizeList[curImgNo];
-		int height = imgSize.height, width = imgSize.width;
-		Point2d srcPt00(0,0), srcPt01(width,0), srcPt10(0,height), srcPt11(width,height);
-		Point2d dstPt00, dstPt01, dstPt10, dstPt11;
-		Utils::pointTransform(homoMat, srcPt00, dstPt00);
-		Utils::pointTransform(homoMat, srcPt01, dstPt01);
-		Utils::pointTransform(homoMat, srcPt10, dstPt10);
-		Utils::pointTransform(homoMat, srcPt11, dstPt11);
+		cv::Mat image = cv::imread(_filePathList[i]);	
+		std::vector<cv::Point2d> warpedCorners, imageCorners{
+			{0.0, 0.0}, {image.cols - 1.0, 0.0}, {image.cols - 1.0, image.rows - 1.0}, {0.0, image.rows - 1.0}};
 
-		double fminX, fminY, fmaxX, fmaxY;
-		fminX = min(min(dstPt00.x, dstPt01.x), min(dstPt10.x, dstPt11.x));
-		fmaxX = max(max(dstPt00.x, dstPt01.x), max(dstPt10.x, dstPt11.x));
-		fminY = min(min(dstPt00.y, dstPt01.y), min(dstPt10.y, dstPt11.y));
-		fmaxY = max(max(dstPt00.y, dstPt01.y), max(dstPt10.y, dstPt11.y));
-		int minX, minY, maxX, maxY;
-		minX = int(fabs(fminX)+1)*(fminX < 0 ? -1 : 1);
-		maxX = int(fabs(fmaxX)+1)*(fmaxX < 0 ? -1 : 1);
-		minY = int(fabs(fminY)+1)*(fminY < 0 ? -1 : 1);
-		maxY = int(fabs(fmaxY)+1)*(fmaxY < 0 ? -1 : 1);
+		cv::Mat homography = scaledHomography(i, image.size());
+		std::cout << _filePathList[i] << std::endl << homography << std::endl;
 
-		int startX = minX-mosaicRect.x; int endX = startX+maxX-minX;
-		int startY = minY-mosaicRect.y; int endY = startY+maxY-minY;
-		int r, c;
-		Mat warpedImage;
-		if (needMask && needAlpha)
-		{
-			warpedImage = Mat(newRow, newCol, CV_8UC4, Scalar(BKGRNDPIX,BKGRNDPIX,BKGRNDPIX,0));
-		}
-		else if (needMask && !needAlpha)
-		{
-			warpedImage = Mat(newRow, newCol, CV_8UC3, Scalar(BKGRNDPIX,BKGRNDPIX,BKGRNDPIX));
-		}
-		uchar *curWarpData = (uchar*)warpedImage.data;
-
-		string filePath = _filePathList[curImgNo];
-		Mat image = imread(filePath);
-
-		uchar *curImgData = (uchar*)image.data;
-		Mat_<double> invHomoMat = homoMat.inv();
-		for (r = startY; r < endY; r ++)            
-		{
-			for (c = startX; c < endX; c ++)
-			{
-				int grayValueR, grayValueG, grayValueB;
-				Point2d dstPt(c+mosaicRect.x,r+mosaicRect.y), srcPt(0,0);
-				Utils::pointTransform(invHomoMat, dstPt, srcPt);
-				int u = int(srcPt.x), v = int(srcPt.y);
-				if (0 < u && width-1 > u && 0 < v && height-1 > v)
-				{
-					int grayValueR1 = 0, grayValueR2 = 0;
-					int grayValueG1 = 0, grayValueG2 = 0;
-					int grayValueB1 = 0, grayValueB2 = 0;
-
-					//bilinear interpolation
-					grayValueR1 = curImgData[3*(v*width+u)+0]*(1-(srcPt.x-u)) + curImgData[3*(v*width+u+1)+0]*(srcPt.x-u);
-					grayValueG1 = curImgData[3*(v*width+u)+1]*(1-(srcPt.x-u)) + curImgData[3*(v*width+u+1)+1]*(srcPt.x-u);
-					grayValueB1 = curImgData[3*(v*width+u)+2]*(1-(srcPt.x-u)) + curImgData[3*(v*width+u+1)+2]*(srcPt.x-u);
-
-					grayValueR2 = curImgData[3*((v+1)*width+u)+0]*(1-(srcPt.x-u)) + curImgData[3*((v+1)*width+(u+1))+0]*(srcPt.x-u);
-					grayValueG2 = curImgData[3*((v+1)*width+u)+1]*(1-(srcPt.x-u)) + curImgData[3*((v+1)*width+(u+1))+1]*(srcPt.x-u);
-					grayValueB2 = curImgData[3*((v+1)*width+u)+2]*(1-(srcPt.x-u)) + curImgData[3*((v+1)*width+(u+1))+2]*(srcPt.x-u);
-
-					grayValueR = grayValueR1*(1-(srcPt.y-v)) + grayValueR2*(srcPt.y-v);
-					grayValueG = grayValueG1*(1-(srcPt.y-v)) + grayValueG2*(srcPt.y-v);
-					grayValueB = grayValueB1*(1-(srcPt.y-v)) + grayValueB2*(srcPt.y-v);
-
-					if (needMask)
-					{
-						if (!needAlpha)
-						{
-							curWarpData[3*(r*newCol+c)+0] = grayValueR;
-							curWarpData[3*(r*newCol+c)+1] = grayValueG;
-							curWarpData[3*(r*newCol+c)+2] = grayValueB;
-						}
-						else
-						{
-							warpedImage.at<Vec4b>(r,c)[3] = 255;   //! for alpha channel
-							warpedImage.at<Vec4b>(r,c)[0] = grayValueR;  //! B
-							warpedImage.at<Vec4b>(r,c)[1] = grayValueG;  //! G
-							warpedImage.at<Vec4b>(r,c)[2] = grayValueB;  //! R
-						}
-					}
-					//! set for the mosaic image
-					mosaicData[3*(r*newCol+c)+0] = grayValueR;
-					mosaicData[3*(r*newCol+c)+1] = grayValueG;
-					mosaicData[3*(r*newCol+c)+2] = grayValueB;
-				}
-			}
-		}
-		if (!needMask)
-		{
-			continue;
-		}
-		char name[512];
-		sprintf(name,"/Masks/warp%03d.png", curImgNo);
-		string savePath = Utils::baseDir + string(name);
-		imwrite(savePath, warpedImage);
+		cv::perspectiveTransform(imageCorners, warpedCorners, homography);
+		std::cout << warpedCorners[0] << " " << warpedCorners[1] << " " << warpedCorners[2] << " " << warpedCorners[3] << " " << std::endl;
+		warpedCornersAll.insert(std::end(warpedCornersAll), std::begin(warpedCorners), std::end(warpedCorners));
 	}
 
-	string filePath = Utils::baseDir + "/mosaic.png";
-	imwrite(filePath, stitchImage);
-	cout<<"-Completed!"<<endl;
-	*/
+	auto minmaxX = std::minmax_element(warpedCornersAll.begin(), warpedCornersAll.end(), [](auto a, auto b){ return a.x < b.x; });
+	auto minmaxY = std::minmax_element(warpedCornersAll.begin(), warpedCornersAll.end(), [](auto a, auto b){ return a.y < b.y; });
+
+	int xBias = -1.0 * (*minmaxX.first).x, yBias = -1.0 * (*minmaxY.first).y;
+	int colNum = (*minmaxX.second).x - (*minmaxX.first).x, rowNum = (*minmaxY.second).y - (*minmaxY.first).y;
+
+	cv::Mat mosaicImage = cv::Mat(rowNum, colNum, CV_8UC4, Scalar(255, 255, 255, 0));
+
+	for (int i = 0; i < _imgNum; i ++)
+	{
+		cv::Mat image = cv::imread(_filePathList[i]);	
+		cv::Mat homography = scaledHomography(i, image.size());
+		homography.at<double>(0, 2) += xBias;
+		homography.at<double>(1, 2) += yBias;
+		cv::Mat warpedImage = cv::Mat(rowNum, colNum, CV_8UC4, Scalar(255, 255, 255, 0));
+		cv::warpPerspective(image, warpedImage, homography, warpedImage.size());
+		cv::warpPerspective(image, mosaicImage, homography, mosaicImage.size(), cv::InterpolationFlags::INTER_LINEAR, cv::BorderTypes::BORDER_TRANSPARENT);
+		cv::imwrite(_outputDir  + "/mosaic" + std::to_string(i) + ".png", warpedImage);
+	}
+	cv::imwrite(_outputDir  + "/mosaic.png", mosaicImage);
+
+	std::cout << std::endl;
 }
 
 
 void ImageAligner::saveMosaicImageP()
 {
-	cout<<"#Warping sequential images ..."<<endl;
+	std::cout << "Creating image mosaic ..." << std::endl;
 	bool needMask = Need_Mask, needAlpha = false;
-	vector<Point2d> nodePts;
+	std::vector<cv::Point2d> nodePts;
 	Rect mosaicRect = setImageSize(nodePts);
+	// need to resize aboe rect to get full res
 	int newRow = mosaicRect.height, newCol = mosaicRect.width;
 	int i, j;
 	Rect newImgRect;
-	Mat stitchImage(newRow, newCol, CV_8UC3, Scalar(BKGRNDPIX,BKGRNDPIX,BKGRNDPIX));
+	Mat stitchImage(newRow, newCol, CV_8UC3, Scalar(BKGRNDPIX, BKGRNDPIX, BKGRNDPIX));
 	uchar *mosaicData = (uchar*)stitchImage.data;
 	Rect refRect;
 	for (i = 0; i < _imgNum; i ++)
 	{
 		int curImgNo = i;
 		int curIndex = findVisitIndex(curImgNo);
-		cout<<"Warping Image: "<<curImgNo<<"..."<<endl;
+		cout << "Warping Image: " << curImgNo << "..." << endl;
 		Mat_<double> homoMat = _alignModelList[curIndex];
 		Size imgSize = _imgSizeList[curImgNo];
 		int height = imgSize.height, width = imgSize.width;
@@ -1601,13 +1533,9 @@ void ImageAligner::saveMosaicImageP()
 		{
 			continue;
 		}
-		// char name[512];
-		// sprintf(name,"/Masks/warp%03d.png", curImgNo);
-		// string savePath = Utils::baseDir + string(name);
-		// imwrite(savePath, warpedImage);
 	}
 
-	string filePath = _outputDir + "/mosaic.png";
+	string filePath = _outputDir + "/mosaic_orig.png";
 	imwrite(filePath, stitchImage);
 	cout << "Completed saving mosaic " << _outputDir << endl;
 }
@@ -1642,7 +1570,7 @@ double ImageAligner::CalWarpDeviation(vector<Point2d> pointSet1, vector<Point2d>
 
 void ImageAligner::recheckTopology(int sIndex, int eIndex)
 {
-	cout<<"-Recheck potential topology ..."<<endl;
+	cout << "-Recheck potential topology ..." << endl;
 	int addedPairs = 0;
 	for (int i = sIndex; i <= eIndex; i ++)
 	{
@@ -1699,102 +1627,6 @@ void ImageAligner::recheckTopology(int sIndex, int eIndex)
 	}
 	cout<<"-Done! added "<<addedPairs<<" pairs."<<endl;
 }
-
-
-void ImageAligner::drawTopologyNet()
-{
-	vector<Point2d> coreLocations;
-	int i, j, k;
-	//! in the order of '_visitOrser'
-	for (i = 0; i < _imgNum; i ++)
-	{
-		int imgNo = _visitOrder[i].imgNo;
-		double x0 = _imgSizeList[imgNo].width/2.0;
-		double y0 = _imgSizeList[imgNo].height/2.0;
-		Point2d centroid(x0, y0);
-		Point2d warpPt;
-		Utils::pointTransform(_alignModelList[i], centroid, warpPt);
-		coreLocations.push_back(warpPt);
-	}
-	int minX = 999, minY = 999, maxX = 0, maxY = 0;
-	for (i = 0; i < coreLocations.size(); i ++)
-	{
-		Point2d tmpPt = coreLocations[i];
-		int x = int(fabs(tmpPt.x)+1)*(tmpPt.x < 0 ? -1 : 1);
-		int y = int(fabs(tmpPt.y)+1)*(tmpPt.y < 0 ? -1 : 1);
-		if (x > maxX)
-			maxX = x;
-		if (x < minX)
-			minX = x;
-		if (y > maxY)
-			maxY = y;
-		if (y < minY)
-			minY = y;
-	}
-	double width = maxX - minX;
-	double height = maxY - minY;
-	int imageRange = 2000;             //maximum side_length
-	int edgeRange = 60;
-	double cvtScale = imageRange/min(height,width);
-	int imageRow = height * cvtScale + edgeRange*2;   // add an edge space of 20 pixel
-	int imageCol = width * cvtScale + edgeRange*2;
-	Mat displayPlane(imageRow, imageCol, CV_8UC3, Scalar(255,255,255));
-
-	// cv::cvFont font;
-	// double hScale = 1;
-	// double vScale = 1;
-	// cvInitFont(&font,cv::CV_FONT_HERSHEY_PLAIN, hScale,vScale,0,1);      //����������
-	vector<Point2i> dotPtList;
-	//! in the order of '_visitOrser'
-	for (i = 0; i < coreLocations.size(); i ++)
-	{
-		int c = int((coreLocations[i].x-minX) * cvtScale + 1) + edgeRange;
-		int r = int((coreLocations[i].y-minY) * cvtScale + 1) + edgeRange;
-		dotPtList.push_back(Point2i(c,r));
-		// circle(displayPlane, Point2i(c,r), 24, Scalar(255,0,0), -1);
-//		circle(displayPlane, Point2i(c,r), 3, Scalar(255,255,0), -1);
-		int imgNo = _visitOrder[i].imgNo;
-		char text[100];
-		sprintf(text,"%d", imgNo);
-		Point2i dotPt(c+3, r+3);
-//		cv::putText(displayPlane, text, dotPt, 2, 1, Scalar(0,0,0));
-	}
-
-	for (i = 0; i < _imgNum-1; i ++)         //draw all related lines
-	{
-		for (j = i+1; j < _imgNum; j ++)
-		{
-			int imgNo1 = _visitOrder[i].imgNo;
-			int imgNo2 = _visitOrder[j].imgNo;
-			int PtNum = _similarityMat(imgNo1,imgNo2);
-			if (PtNum != 0)
-			{
-				Point2i startPt = dotPtList[i];
-				Point2i endPt = dotPtList[j];				
-				if (PtNum < 100 || 1)
-				{
-					line(displayPlane, startPt, endPt, Scalar(128,128,128), 2);
-				}
-				else
-				{
-					line(displayPlane, startPt, endPt, Scalar(0,255,0), 2);
-				}
-			}
-		}
-	}
-	for (i = 1; i < _imgNum; i ++)        //! draw the related lines in MST
-	{
-		int refNo = _visitOrder[i].refNo;
-		int refIndex = findVisitIndex(refNo);
-		Point2i startPt = dotPtList[i];
-		Point2i endPt = dotPtList[refIndex];
-		line(displayPlane, startPt, endPt, Scalar(0,0,255), 3);
-	}
-	string savePath = _outputDir + "/finalTopology.png";
-	imwrite(savePath, displayPlane);
-	cout<<"#the topology graph of images is saved!"<<endl;
-}
-
 
 void ImageAligner::labelGroupNodes()
 {
@@ -1901,91 +1733,6 @@ void ImageAligner::labelGroupNodes()
 }
 
 
-void ImageAligner::drawSimilarMatrix()
-{
-	int margin = 50;
-	int imageRow = 800, imageCol = 800;
-	int unitSize = 800/_imgNum;
-	// CvFont font;
-	// double hScale = 1;
-	// double vScale = 1;
-	// cvInitFont(&font,CV_FONT_HERSHEY_PLAIN, hScale,vScale,0,1);      //define the label font
-	Mat displayPlane(imageRow+2*margin, imageCol+2*margin, CV_8UC3, Scalar(0,0,0));
-	for (int i = 0; i < _imgNum; i ++)
-	{
-		Point2i startPt_h(margin+i*unitSize, margin);        //draw vertical lines
-		Point2i endPt_h(margin+i*unitSize, margin+unitSize*_imgNum);
-		line(displayPlane, startPt_h, endPt_h, Scalar(128,128,128), 1);
-		char text_h[100];
-		sprintf(text_h,"%d", i+1);       
-		Point2i dotPt1(startPt_h.x, startPt_h.y-10);         //draw horizontal labels(the dot is at left-bottom of the label)
-		// cv::putText(displayPlane, text_h, dotPt1, 1, 1, Scalar(255,255,255));
-
-		Point2i startPt_v(margin, margin+i*unitSize);        //draw horizontal lines
-		Point2i endPt_v(margin+unitSize*_imgNum, margin+i*unitSize);
-		line(displayPlane, startPt_v, endPt_v, Scalar(128,128,128), 1);
-		char text_v[100];
-		sprintf(text_v,"%d", i+1);
-		Point2i dotPt2(startPt_v.x-25, startPt_v.y+10);        //draw vertical labels
-		// cv::putText(displayPlane, text_v, dotPt2, 1, 1, Scalar(255,255,255));
-	}
-	int* numDataPtr = (int*)_similarityMat.data;
-	int max_match_num = 0, min_match_num = 9999;
-	for (int i = 0; i < _imgNum-1; i ++)
-	{
-		for (int j = i+1; j < _imgNum; j ++)
-		{
-			int num = numDataPtr[i*_imgNum+j];
-			if (num > max_match_num)
-			{
-				max_match_num = num;
-			}
-			if (num < min_match_num)
-			{
-				min_match_num = num;
-			}
-		}
-	}
-	double grayScale = (255-64+1)*1.0 / (max_match_num-min_match_num+1);
-	for (int i = 0; i < _imgNum-1; i ++)
-	{
-		for (int j = i+1; j < _imgNum; j ++)
-		{
-			Point2i leftTop, rigtBtm;
-			leftTop.x = margin + i*unitSize;
-			leftTop.y = margin + j*unitSize;
-			rigtBtm.x = leftTop.x + unitSize;
-			rigtBtm.y = leftTop.y + unitSize;
-
-			int PtNum = _similarityMat(i,j);
-			if (PtNum == 0)
-			{
-				continue;
-			}
-			int grayValue = 64 + int((PtNum-min_match_num) * grayScale);
-			int r, c;
-			for (c = leftTop.x; c < rigtBtm.x; c ++)
-			{
-				for (r = leftTop.y; r < rigtBtm.y; r ++)
-				{
-					//! down triangle
-					displayPlane.at<Vec3b>(r,c)[0] = grayValue;
-					displayPlane.at<Vec3b>(r,c)[1] = grayValue;
-					displayPlane.at<Vec3b>(r,c)[2] = grayValue;
-					//! up triangle
-					displayPlane.at<Vec3b>(c,r)[0] = grayValue;
-					displayPlane.at<Vec3b>(c,r)[1] = grayValue;
-					displayPlane.at<Vec3b>(c,r)[2] = grayValue;
-				}
-			}
-		}
-	}
-	string savePath = _outputDir + "/similarTable.jpg";
-	imwrite(savePath, displayPlane);
-	cout<<"the similarity table of images is saved!"<<endl;
-}
-
-
 void ImageAligner::outputPrecise()
 {
 	cout<<"#Error analyzing ..."<<endl;
@@ -2068,83 +1815,3 @@ void ImageAligner::outputPrecise()
 	cout<<"-Completed! with RME : "<<meanBias<<endl;
 }
 
-
-void ImageAligner::saveModelParams()
-{
-	cout<<"#Save aligning model params ..."<<endl;
-	string savePath = _outputDir + "/modelParmas.txt";
-	ofstream fout(savePath, ios::out);
-	if (!fout.is_open())
-	{
-		cout<<"Save path not exists!"<<endl;
-		exit(0);
-	}
-	for (int i = 0; i < _imgNum; i ++)
-	{
-		int curImgNo = i;
-		int curIndex = findVisitIndex(curImgNo);
-		double* dataPtr = (double*)_alignModelList[curIndex].data;
-		for (int j = 0; j < 8; j ++)
-		{
-			fout<<dataPtr[j]<<"  ";
-		}
-		fout<<endl;
-	}
-	cout<<"-Completed!"<<endl;
-}
-
-
-void ImageAligner::loadHomographies()
-{
-	cout<<"#Load aligning model params ..."<<endl;
-	string filePath = _outputDir + "/modelParmas.txt";
-	ifstream fin(filePath, ios::in);
-	if (!fin.is_open())
-	{
-		cout<<"File not exists!"<<endl;
-		exit(0);
-	}
-	//! initializing
-	for (int i = 0; i < _imgNum; i ++)
-	{
-		Mat_<double> homoMat = Mat::eye(3,3,CV_64FC1);
-		_alignModelList.push_back(homoMat);
-	}
-	double u0 = 500.971, v0 = 323.486;
-	Mat_<double> trans0 = (Mat_<double>(3,3) << 1, 0, -u0,
-		                                       0, -1, 641-v0,
-		                                       0, 0, 1);
-	Mat_<double> trans1 = (Mat_<double>(3,3) << 1, 0, u0,
-		                                       0, -1, -641+v0,
-		                                       0, 0, 1);
-	double kappa = 180;
-	Mat_<double> Rz = (Mat_<double>(3,3) << cos(kappa), -sin(kappa), 0,
-		                                    sin(kappa), cos(kappa), 0,
-		                                        0,               0, 1);
-	Mat_<double> t1 = (Mat_<double>(3,3) << 1, 0, -u0, 0, 1, -v0, 0, 0, 1);
-	Mat_<double> t2 = (Mat_<double>(3,3) << 1, 0, u0, 0, 1, v0, 0, 0, 1);
-	Mat_<double> bar = t2*Rz*t1;
-	for (int i = 0; i < _imgNum; i ++)
-	{
-		Mat_<double> homoMat = Mat::eye(3,3,CV_64FC1);
-		double* dataPtr = (double*)homoMat.data;
-		for (int j = 0; j < 8; j ++)
-		{
-			double param = 0;
-			fin >> param;
-			dataPtr[j] = param;
-		}
-		int curImgNo = i;
-		int curIndex = findVisitIndex(curImgNo);
-		if ((i/31)%2 == 0)  //! rotate 180
-		{
-			_alignModelList[curIndex] = trans1*homoMat*trans0;
-		}
-		else
-		{
-			_alignModelList[curIndex] = trans1*homoMat*trans0;
-		}
-	}
-	fin.close();
-	cout<<"-Completed!"<<endl;
-}

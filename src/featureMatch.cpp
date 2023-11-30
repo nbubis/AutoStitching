@@ -4,30 +4,28 @@
 #include "opencv2/features2d.hpp"
 #include "opencv2/xfeatures2d.hpp"
 
-const int PointMatcher::minimumMatches = 30;
+const int PointMatcher::minimumMatches = 10;
 
-PointMatcher::PointMatcher(std::vector<std::string> &imgPathList, int limitImageMatchNum, int resizedWidthForFeatures)
+PointMatcher::PointMatcher(std::vector<std::string> &imgPathList, int limitImageMatchNum, float resizedFactorForFeatures) :
+	_resizedFactorForFeatures(resizedFactorForFeatures), _imgNum(imgPathList.size()), _imgPathList(imgPathList)
 {
-	if (limitImageMatchNum <= 0)
-	{
-		limitImageMatchNum = _imgNum;
-	}
 
-	_imgPathList = imgPathList;
-	_imgNum = imgPathList.size();
-	_resizedWidthForFeatures = resizedWidthForFeatures;
 	featureExtractor();
 
 	std::vector<int> imageRange(_imgNum);
 	std::iota(imageRange.begin(), imageRange.end(), 0);
 	std::cout << "Matching features ..." << std::endl;
 
+	if (limitImageMatchNum <= 0)
+	{
+		limitImageMatchNum = _imgNum;
+	}
 	float percent = 0.0;
 
 	_matches.resize(_imgNum);
 	std::for_each(_matches.begin(), _matches.end(), [&](auto & match_i) {match_i.resize(_imgNum);});
 
-	std::for_each(std::execution::par_unseq, imageRange.begin(), imageRange.end(), [&](auto &i)
+	std::for_each(std::execution::seq, imageRange.begin(), imageRange.end(), [&](auto &i)
 	{
 		for (int j = i + 1; j < std::min(i + limitImageMatchNum + 1, _imgNum); j++) { 
 			featureMatcher(i, j);
@@ -43,7 +41,7 @@ PointMatcher PointMatcher::getSubset(int imgIndex1, int imgIndex2)
 	PointMatcher subset(*this);
 
 	subset._imgNum = imgIndex2 - imgIndex1;
-	subset._resizedWidthForFeatures = _resizedWidthForFeatures;
+	subset._resizedFactorForFeatures = _resizedFactorForFeatures;
 	subset._imgPathList = {_imgPathList.begin() + imgIndex1, _imgPathList.begin() + imgIndex2};
 	subset._imgSizeList = {_imgSizeList.begin() + imgIndex1, _imgSizeList.begin() + imgIndex2};
 	subset._keyPts = {_keyPts.begin() + imgIndex1, _keyPts.begin() + imgIndex2};
@@ -68,8 +66,8 @@ void PointMatcher::featureExtractor()
 
 		cv::Mat image = cv::imread(imgName);
 
-		if (_resizedWidthForFeatures > 0) {
-			cv::resize(image, image, cv::Size(_resizedWidthForFeatures, int(image.rows * _resizedWidthForFeatures / image.cols)));
+		if (_resizedFactorForFeatures > 0) {
+			cv::resize(image, image, cv::Size(image.rows / _resizedFactorForFeatures , int(image.cols / _resizedFactorForFeatures)));
 		}
 
 		std::vector<cv::KeyPoint> keyPts;
@@ -216,18 +214,19 @@ bool PointMatcher::featureMatcher(int imgIndex1, int imgIndex2)
 void PointMatcher::saveMatchPts(int imgIndex1, int imgIndex2, std::vector<cv::Point2d> &pointSet1, std::vector<cv::Point2d> &pointSet2)
 {
 	std::vector<std::pair<cv::Point2d, cv::Point2d>> matchPairs;
+
 	if (imgIndex2 > imgIndex1)
 	{
 		for (int i = 0; i < pointSet1.size(); i++)
 		{
-			matchPairs.push_back(std::make_pair(pointSet1[i], pointSet2[i]));
+			matchPairs.push_back({pointSet1[i], pointSet2[i]});
 		}
 	}
 	else
 	{
 		for (int i = 0; i < pointSet1.size(); i++)
 		{
-			matchPairs.push_back(std::make_pair(pointSet2[i], pointSet1[i]));
+			matchPairs.push_back({pointSet2[i], pointSet1[i]});
 		}
 	}
 
@@ -247,10 +246,10 @@ bool PointMatcher::getMatchPoints(int imgIndex1, int imgIndex2, std::vector<cv::
 	}
 	else
 	{
-		for (int i = 0; i < _matches[imgIndex1][imgIndex2].size(); i++)
+		for (int i = 0; i < _matches[imgIndex2][imgIndex1].size(); i++)
 		{
-			pointSet1.push_back(_matches[imgIndex1][imgIndex2][i].second);
-			pointSet2.push_back(_matches[imgIndex1][imgIndex2][i].first);
+			pointSet1.push_back(_matches[imgIndex2][imgIndex1][i].second);
+			pointSet2.push_back(_matches[imgIndex2][imgIndex1][i].first);
 		}
 	}
 	return true;

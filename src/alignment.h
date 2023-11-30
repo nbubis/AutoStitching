@@ -45,7 +45,6 @@ public:
 	//*** functions for sorting the topological relationship of images ***//
 	void sortImageOrder(int referNo, bool shallLoad, bool isInorder);
 	void divideImageGroups();
-	bool loadMatchPts(int imgIndex1, int imgIndex2, vector<Point2d> &pointSet1, vector<Point2d> &pointSet2);
 
 public: 
 	//*** functions for building and optimizing the alignment  ***//
@@ -75,14 +74,10 @@ public:
 
 	//! display or output functions
 	Rect setImageSize(vector<Point2d> &nodePts);
-	void saveMosaicImage();         //! aligning in added order
+	void saveMosaicImage(float resizedWidthForMosaic);         //! aligning in added order
 	void saveMosaicImageP();        //! aligning in image no. order
 	void outputPrecise();
-	void loadHomographies();
-	void saveModelParams();
-	void drawTopologyNet();
 	void labelGroupNodes();
-	void drawSimilarMatrix();
 
 private:
 	PointMatcher _matcher;

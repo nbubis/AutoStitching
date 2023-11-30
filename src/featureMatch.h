@@ -12,7 +12,7 @@ class PointMatcher
 
 public:
   	static const int minimumMatches;
-	PointMatcher(std::vector<std::string> & imgNameList, int limitImageMatchNum = 0, int resizedWidthForFeatures = 0);
+	PointMatcher(std::vector<std::string> & imgNameList, int limitImageMatchNum = 0, float resizedFactorForFeatures = 1.0f);
 	void getfeatures(int imgIndex, std::vector<cv::Point2d> &imageKeyPts, cv::Mat &imageDescriptors, int ratio = 1);
 	bool getMatchPoints(int imgIndex1, int imgIndex2, std::vector<cv::Point2d> &pointSet1, std::vector<cv::Point2d> &pointSet2);
 	PointMatcher getSubset(int imgIndex1, int imgIndex2);
@@ -27,7 +27,7 @@ private:
 private:
 
 	int _imgNum;
-	int _resizedWidthForFeatures;
+	float _resizedFactorForFeatures;
 	std::vector<cv::Size> _imgSizeList;
 	std::vector<std::string> _imgPathList;
 	std::vector<std::vector<cv::KeyPoint>> _keyPts;
