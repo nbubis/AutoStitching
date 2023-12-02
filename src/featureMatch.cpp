@@ -74,10 +74,15 @@ void PointMatcher::featureExtractor()
 	std::for_each(std::execution::par_unseq, _imgPathList.begin(), _imgPathList.end(), [&](std::string & imgName) {
 
 		cv::Mat image = cv::imread(imgName);
+
 		int i = &imgName - &_imgPathList[0];
 
 		_imgSizeList[i] = image.size();
 
+		if (image.cols == 0 || image.rows == 0) {
+			return;
+		}
+		
 		if (_resizedFactorForFeatures > 0) {
 			cv::resize(image, image, cv::Size(image.cols / _resizedFactorForFeatures , int(image.rows / _resizedFactorForFeatures)));
 		}
@@ -269,89 +274,5 @@ bool PointMatcher::getMatchPoints(int imgIndex1, int imgIndex2, std::vector<cv::
 			pointSet2.push_back(_matches[imgIndex2][imgIndex1][i].first);
 		}
 	}
-	return true;
-}
-
-bool PointMatcher::tentativeMatcher(int imgIndex1, int imgIndex2)
-{
-	// std::vector<cv::Point2d> keyPts1, keyPts2;
-	// cv::Mat descriptors1, descriptors2;
-	// getfeatures(imgIndex1, keyPts1, descriptors1, 3);
-	// getfeatures(imgIndex2, keyPts2, descriptors2, 3);
-
-	// // Matching descriptor vectors using FLANN matcher
-	// vector<DMatch> m_Matches;
-	// FlannBasedMatcher matcher;
-	// vector<vector<DMatch>> knnmatches;
-	// int num1 = keyPts1.size(), num2 = keyPts2.size();
-	// int kn = min(min(num1, num2), 5);
-	// try
-	// {
-	// 	matcher.knnMatch(descriptors1, descriptors2, knnmatches, kn);
-	// }
-	// catch (std::exception const &e)
-	// {
-	// 	std::cout << "Exception: " << e.what() << std::endl;
-	// }
-	// int i, j;
-	// double minimaDsit = 99999;
-	// for (i = 0; i < knnmatches.size(); i++)
-	// {
-	// 	double dist = knnmatches[i][0].distance;
-	// 	if (dist < minimaDsit)
-	// 	{
-	// 		minimaDsit = dist;
-	// 	}
-	// }
-	// double fitedThreshold = minimaDsit * 5;
-	// int keypointsize = knnmatches.size();
-	// for (i = 0; i < keypointsize; i++)
-	// {
-	// 	const DMatch nearDist1 = knnmatches[i][0];
-	// 	const DMatch nearDist2 = knnmatches[i][1];
-	// 	double distanceRatio = nearDist1.distance / nearDist2.distance;
-	// 	if (nearDist1.distance < fitedThreshold && distanceRatio < 0.7)
-	// 	{
-	// 		m_Matches.push_back(nearDist1);
-	// 	}
-	// }
-	// vector<Point2d> iniPts1, iniPts2;
-	// for (i = 0; i < m_Matches.size(); i++) // get initial match pairs
-	// {
-	// 	int queryIndex = m_Matches[i].queryIdx;
-	// 	int trainIndex = m_Matches[i].trainIdx;
-	// 	Point2d tempPt1 = keyPts1[queryIndex];
-	// 	Point2d tempPt2 = keyPts2[trainIndex];
-	// 	iniPts1.push_back(tempPt1);
-	// 	iniPts2.push_back(tempPt2);
-	// }
-	// if (iniPts1.size() < 15)
-	// {
-	// 	return false;
-	// }
-	// Mat_<double> homography = findHomography(iniPts1, iniPts2, RANSAC, 5.0); // initial solution : from image2 to image1
-
-	// if (homography.empty()) {
-	// 	return false;
-	// }
-
-	// vector<Point2d> goodPts1, goodPts2, warpedPoints;
-
-	// cv::perspectiveTransform(iniPts1, warpedPoints, homography);
-
-	// for (int i = 0; i < iniPts1.size(); i++)
-	// {
-	// 	if (cv::norm(warpedPoints[i] - iniPts2[i]) < 5.0)
-	// 	{
-	// 		goodPts1.push_back(iniPts1[i]);
-	// 		goodPts2.push_back(iniPts2[i]);
-	// 	}
-	// }
-
-	// if (goodPts1.size() < 5)
-	// {
-	// 	return false;
-	// }
-
 	return true;
 }

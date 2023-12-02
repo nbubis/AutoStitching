@@ -7,11 +7,7 @@
 #include <iostream>
 #include <fstream>
 
-#define PENALTY_COEFF 0.1  //! set for LM only
-#define Lambada       0.1  //! set for BA only
 #define OPT_GROUP_NUM 30
-#define BKGRNDPIX     255
-#define Need_Mask     1
 
 using namespace std;
 using namespace cv;
@@ -40,7 +36,7 @@ struct LMData
 class ImageAligner
 {
 public:
-	ImageAligner(PointMatcher & pointMatcher, std::string outputDir);
+	ImageAligner(PointMatcher & pointMatcher, bool forceSimilarity, std::string outputDir);
         
 	//*** functions for sorting the topological relationship of images ***//
 	void sortImageOrder(int referNo, bool shallLoad, bool isInorder);
@@ -68,9 +64,6 @@ public:
 	void bundleAdjusting(int sIndex, int eIndex);   //! method 2 : normalize by point
 	void buildIniSolution(double* X, double* initX, int sIndex, int eIndex);
 
-	//! detect potential overlapping relationships based on the new position (only used in the refinement)
-	void recheckTopology(int sIndex, int eIndex);
-
 	//! display or output functions
 	Rect setImageSize(vector<Point2d> &nodePts);
 	void saveMosaicImage(float resizedWidthForMosaic);         //! aligning in added order
@@ -92,4 +85,7 @@ private:
 	vector<string> _filePathList;
 	vector<Size> _imgSizeList;               //! order agree with image no.
 	std::string _outputDir;
+	bool _forceSimilarity;
+	static float _penaltyCoeffLM;
+	float _penaltyCoeffBA;
 };

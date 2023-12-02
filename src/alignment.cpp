@@ -3,15 +3,21 @@
 #include <numeric>
 #include <execution>
 
+float ImageAligner::_penaltyCoeffLM = 0.1;
 
-ImageAligner::ImageAligner(PointMatcher & pointMatcher, std::string outputDir) : 
-	_matcher(pointMatcher)
+ImageAligner::ImageAligner(PointMatcher & pointMatcher, bool forceSimilarity, std::string outputDir) : 
+	_forceSimilarity(forceSimilarity), _matcher(pointMatcher)
 {
 	_imgNum = pointMatcher.imgNum();
 	_imgSizeList = _matcher.imgSizeList();
 	_filePathList = _matcher.imgPathList();
 	_refImgNo = 0;
 	_outputDir = outputDir;
+	if (forceSimilarity) {
+		_penaltyCoeffBA = 0.1;
+	} else {
+		_penaltyCoeffBA = 0.01;
+	}
 };
 
 void ImageAligner::sortImageOrder(int referNo, bool shallLoad, bool isInorder)
@@ -80,12 +86,16 @@ void ImageAligner::imageStitcherbyGroup(int referNo)
 		int sIndex = _groupCusorList[i-1]+1;
 		int eIndex = _groupCusorList[i];
 
-		solveGroupModelsS(sIndex, eIndex);
 
-//		recheckTopology(sIndex, eIndex);
+		if (_forceSimilarity) 
+		{
+			solveGroupModelsS(sIndex, eIndex);
+		} else 
+		{
+			solveGroupModels(sIndex, eIndex);
+		}
 
-		bool needRefine = true;
-		if (needRefine && i == _groupCusorList.size()-1)
+		if (i == _groupCusorList.size()-1)
 		{
 			bundleAdjustinga(1, eIndex);
 			sIndex = 0;
@@ -375,6 +385,9 @@ void ImageAligner::solveGroupModelsS(int sIndex, int eIndex)
 		// force area preserving similarity transform 
 		double scaleFactor = std::sqrt(X(i)*X(i) + X(i+1)*X(i+1));
 		
+		if (! _forceSimilarity) {
+			scaleFactor = 1.0;
+		}
 		Mat_<double> affineModel = (Mat_<double>(3,3) << X(i)   / scaleFactor, -X(i+1) / scaleFactor, X(i+2),
 			                                             X(i+1) / scaleFactor,  X(i)   / scaleFactor, X(i+3),
 			                                             0,      0,     1);
@@ -474,7 +487,7 @@ void ImageAligner::bundleAdjusting(int sIndex, int eIndex)
 	double *initX = new double[6*(eIndex-sIndex+1)];
 	buildIniSolution(X, initX, sIndex, eIndex);
 	//! parameters setting of least square optimization
-	double lambada = Lambada;
+	double lambada = _penaltyCoeffBA;
 	int max_iters = 10;
 
 	int rn = 0, ite = 0;
@@ -691,7 +704,7 @@ void ImageAligner::bundleAdjustingA(int sIndex, int eIndex)
 	double *initX = new double[6*(eIndex-sIndex+1)];
 	buildIniSolution(X, initX, sIndex, eIndex);
 	//! parameters setting of least square optimization
-	double lambada = Lambada;
+	double lambada = _penaltyCoeffBA;
 	int max_iters = 10;
 
 	int rn = 0, ite = 0;
@@ -885,7 +898,7 @@ void ImageAligner::bundleAdjustinga(int sIndex, int eIndex)
 	double *initX = new double[6*(eIndex-sIndex+1)];
 	buildIniSolution(X, initX, sIndex, eIndex);
 	//! parameters setting of least square optimization
-	double lambada = Lambada;
+	double lambada = _penaltyCoeffBA;
 	int max_iters = 20;
 
 	int rn = 0, ite = 0;
@@ -1166,6 +1179,7 @@ void ImageAligner::RefineAligningModels(int sIndex, int eIndex)
 
 	double opts[LM_OPTS_SZ], info[LM_INFO_SZ];
 	opts[0]=1E-20; opts[1]=1E-30; opts[2]=1E-30; opts[3]=1E-30;	opts[4]= 1e-9;
+
 	int ret = dlevmar_dif(OptimizationFunction, X, d, m, n, max_its, opts, info, NULL, NULL, (void*)LMInput);
 	for (int i = sIndex; i <= eIndex; i ++)    //stock optimized homographic matrix
 	{
@@ -1261,7 +1275,7 @@ void ImageAligner::OptimizationFunction(double* X, double* d, int m, int n, void
 					double iniMosaic_y1 = (iniHomoVec1[3]*x1 + iniHomoVec1[4]*y1 + iniHomoVec1[5])/(iniHomoVec1[6]*x1 + iniHomoVec1[7]*y1 + 1.0);
 					penalty = sqrt((mosaic_x1-iniMosaic_x1)*(mosaic_x1-iniMosaic_x1)+(mosaic_y1-iniMosaic_y1)*(mosaic_y1-iniMosaic_y1));
 				}
-				d[cnt++] = bias + PENALTY_COEFF*penalty;
+				d[cnt++] = bias + _penaltyCoeffLM * penalty;
 				meanError += bias;
 			}
 		}

@@ -22,6 +22,7 @@ struct SticherArgs : public argparse::Args {
 	unsigned int & limitImageMatchNum       = kwarg("image_match_num", "Number of images to match for each image").set_default(0);
 	float        & resizedFactorForFeatures = kwarg("feature_downsample", "Factor in which to resize images for feature extraction").set_default(1.0f);
 	float        & resizedFactorForMosaic   = kwarg("mosaic_downsample", "Factor in which to resize images for mosaic creation").set_default(1.0f);
+	bool         & forceSimilarity          = kwarg("force_ortho", "Force images to have equal area, required for long stitches").set_default(false);
 };
 
 
@@ -81,7 +82,8 @@ int main(int argc, char* argv[])
 			std::filesystem::path(clusterPointMatcher.imgPathList().back()).filename().string());
 
 		std::filesystem::create_directories(outputDirectory);
-		ImageAligner imgAligner(clusterPointMatcher, outputDirectory);
+
+		ImageAligner imgAligner(clusterPointMatcher, args.forceSimilarity, outputDirectory);
 
 		try {
 			imgAligner.imageStitcherbyGroup(-1);

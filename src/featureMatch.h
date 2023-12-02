@@ -19,10 +19,8 @@ public:
 private:
 
 	void featureExtractor();
-	bool tentativeMatcher(int imgIndex1, int imgIndex2);
 	bool featureMatcher(int imgIndex1, int imgIndex2);
 	void saveMatchPts(int imgIndex1, int imgIndex2, std::vector<cv::Point2d> &pointSet1, std::vector<cv::Point2d> &pointSet2);
-	void pointConvert(cv::Mat_<double> homoMat, cv::Point2d src, cv::Point2d &dst);
 
 private:
 
