@@ -25,31 +25,40 @@ PointMatcher::PointMatcher(std::vector<std::string> &imgPathList, int limitImage
 	_matches.resize(_imgNum);
 	std::for_each(_matches.begin(), _matches.end(), [&](auto & match_i) {match_i.resize(_imgNum);});
 
-	std::for_each(std::execution::seq, imageRange.begin(), imageRange.end(), [&](auto &i)
+	std::for_each(std::execution::par_unseq, imageRange.begin(), imageRange.end(), [&](auto & i)
 	{
 		for (int j = i + 1; j < std::min(i + limitImageMatchNum + 1, _imgNum); j++) { 
 			featureMatcher(i, j);
 		}
+		
 		percent += 1.0f / (float)_imgNum;
 		Utils::printProgress(percent); 
 	});
+
 	std::cout << std::endl;
 };
 
-PointMatcher PointMatcher::getSubset(int imgIndex1, int imgIndex2)
+PointMatcher::PointMatcher(PointMatcher existing, int imgIndex1, int imgIndex2)
 {
-	PointMatcher subset(*this);
-
-	subset._imgNum = imgIndex2 - imgIndex1;
-	subset._resizedFactorForFeatures = _resizedFactorForFeatures;
-	subset._imgPathList = {_imgPathList.begin() + imgIndex1, _imgPathList.begin() + imgIndex2};
-	subset._imgSizeList = {_imgSizeList.begin() + imgIndex1, _imgSizeList.begin() + imgIndex2};
-	subset._keyPts = {_keyPts.begin() + imgIndex1, _keyPts.begin() + imgIndex2};
-	subset._descriptors = {_descriptors.begin() + imgIndex1, _descriptors.begin() + imgIndex2};
-	subset._matches = {_matches.begin() + imgIndex1, _matches.begin() + imgIndex2};
-
-	return subset;
-};
+	_imgNum = imgIndex2 - imgIndex1;
+	_resizedFactorForFeatures = existing._resizedFactorForFeatures;
+	_imgSizeList.clear();
+	_imgPathList.clear();
+	_keyPts.clear();
+	_descriptors.clear();
+	_matches.clear();
+	_matches.resize(_imgNum);
+	for (int i = imgIndex1; i < imgIndex2; i++) {
+		_imgPathList.push_back(existing._imgPathList[i]);
+		_imgSizeList.push_back(existing._imgSizeList[i]);
+		_keyPts.push_back(existing._keyPts[i]);
+		_descriptors.push_back(existing._descriptors[i]);
+		_matches[i - imgIndex1].resize(_imgNum);
+		for (int j = imgIndex1; j < imgIndex2; j++) {
+			_matches[i - imgIndex1][j - imgIndex1] = existing._matches[i][j];
+		}
+	}
+}
 
 void PointMatcher::featureExtractor()
 {
@@ -62,12 +71,15 @@ void PointMatcher::featureExtractor()
 	std::cout << "Reading images and extracting features ..." << std::endl;
 
 	float percent = 0.0f;
-	std::for_each(std::execution::par_unseq, _imgPathList.begin(), _imgPathList.end(), [&](auto &imgName) {
+	std::for_each(std::execution::par_unseq, _imgPathList.begin(), _imgPathList.end(), [&](std::string & imgName) {
 
 		cv::Mat image = cv::imread(imgName);
+		int i = &imgName - &_imgPathList[0];
+
+		_imgSizeList[i] = image.size();
 
 		if (_resizedFactorForFeatures > 0) {
-			cv::resize(image, image, cv::Size(image.rows / _resizedFactorForFeatures , int(image.cols / _resizedFactorForFeatures)));
+			cv::resize(image, image, cv::Size(image.cols / _resizedFactorForFeatures , int(image.rows / _resizedFactorForFeatures)));
 		}
 
 		std::vector<cv::KeyPoint> keyPts;
@@ -75,10 +87,14 @@ void PointMatcher::featureExtractor()
 
 		detector->detectAndCompute(image, cv::noArray(), keyPts, descriptors);
 
-		int i = &imgName - &_imgPathList[0];
+		// upscale features back to original image dimensions
+
+		for (auto & keyPt : keyPts) {
+			keyPt.pt = keyPt.pt * _resizedFactorForFeatures;
+		}
+
 		_keyPts[i] = keyPts;
 		_descriptors[i] = descriptors;
-		_imgSizeList[i] = image.size();
 		percent += 1.0f / (float)_imgNum;
 		Utils::printProgress(percent); 
 	});
@@ -231,6 +247,7 @@ void PointMatcher::saveMatchPts(int imgIndex1, int imgIndex2, std::vector<cv::Po
 	}
 
 	_matches[imgIndex1][imgIndex2] = matchPairs;
+	_matches[imgIndex2][imgIndex1] = matchPairs;
 }
 
 bool PointMatcher::getMatchPoints(int imgIndex1, int imgIndex2, std::vector<cv::Point2d> &pointSet1, std::vector<cv::Point2d> &pointSet2)

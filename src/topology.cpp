@@ -7,8 +7,8 @@ Mat_<double> TopoFinder::findTopology(bool shallLoad, bool isInOrder)
 
 	loadKeyFiles();
 	clock_t start_time, end_time;
-	cout<<"Building similarity table ...\n";
-	Mat_<int> similarMat = detectSimilarityOnGlobal();
+	// cout<<"Building similarity table ...\n";
+	Mat_<int> similarMat = detectSimilarityByGuiding();
 	return similarMat;
 }
 
@@ -16,15 +16,15 @@ Mat_<double> TopoFinder::findTopology(bool shallLoad, bool isInOrder)
 Mat_<int> TopoFinder::detectSimilarityOnGlobal()
 {
 	Mat_<int> similarMat = Mat(_imgNum, _imgNum, CV_32SC1, Scalar(0));
-	for (int i = 0; i < _imgNum - 1; i++)
+	for (int i = 0; i < _imgNum; i++)
 	{
-		for (int j = i + 1; j < std::min(i + 4, _imgNum); j++)
+		for (int j = 0; j < _imgNum; j++)
 		{		
 			similarMat(i, j) = _matcher.matches()[i][j].size();
 			similarMat(j, i) = _matcher.matches()[i][j].size();
-
 		}
 	}
+
 	return similarMat;
 }
 
@@ -50,19 +50,16 @@ Mat_<int> TopoFinder::detectSimilarityByGuiding()
 	bar.imgSize = _matcher.imgSizeList()[_visitOrder0[0].imgNo];
 	bar.centroid = Point2d(bar.imgSize.width/2, bar.imgSize.height/2);
 	_projCoordSet.push_back(bar);
-	cout<<"Detecting potential overlaps ..."<<endl;
+	// cout<<"Detecting potential overlaps ..."<<endl;
 	for (int i = 1; i < _visitOrder0.size(); i ++)
 	{
-		cout<<"No."<<i<<" finding ...";
+		// cout<<"No."<<i<<" finding ...";
 		int curNo = _visitOrder0[i].imgNo;
 		int refNo = _visitOrder0[i].refNo;
 		int refIndex = findNodeIndex(refNo);
 		vector<Point2d> pointSet1, pointSet2;
 		clock_t st, et;
-		st = clock();
-		// _matcher.loadMatchPts(refNo, curNo, pointSet1, pointSet2);
-		et = clock();
-		_matchTime -= (et-st);
+		_matcher.getMatchPoints(refNo, curNo, pointSet1, pointSet2);
 	    Utils::pointTransform(_affineMatList[refIndex], pointSet1);
 		//! perform initial alignment
 		Mat_<double> affineMat = findFastAffine(pointSet1, pointSet2);
@@ -77,9 +74,9 @@ Mat_<int> TopoFinder::detectSimilarityByGuiding()
 		//! detect potential overlaps
 		//! 1) recalculate aligning model; 2) modify centroid; 3) modify similarity table
 		detectPotentialOverlap(i, pointSet1, pointSet2);
-		cout<<"-->end!"<<endl;
+		// cout<<"-->end!"<<endl;
 	}
-	drawTopoNet();
+	// drawTopoNet();
 //	drawTreeLevel();
 //	TsaveMosaicImage();
 	return _similarityMat;
@@ -146,7 +143,7 @@ Mat_<double> TopoFinder::getGuidingTableP()
 
 void TopoFinder::buildMainChain()
 {
-	cout<<"Building main chain according to the time consecutive order ..."<<endl;
+	// cout<<"Building main chain according to the time consecutive order ..."<<endl;
 	int refeNo = _imgNum/2;
 	TreeNode bar(refeNo,-1,0);
 	_visitOrder0.push_back(bar);
@@ -218,7 +215,7 @@ void TopoFinder::buildMainChain()
 	}
 	_attempNum = _imgNum-1;
 	_shotNum = _imgNum-1;
-	cout<<"Completed!"<<endl;
+	// cout<<"Completed!"<<endl;
 }
 
 

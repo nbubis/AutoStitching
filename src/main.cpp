@@ -66,8 +66,14 @@ int main(int argc, char* argv[])
 	std::cout << "Created " << clusterIndices.size() << " clusters." << std::endl; 
 
 	// align clusters
-	std::for_each(std::execution::par_unseq, clusterIndices.begin(), clusterIndices.end(), [&](auto cluster) {
-		PointMatcher clusterPointMatcher = pointMatcher.getSubset(cluster.first, cluster.second + 1);
+	std::for_each(std::execution::seq, clusterIndices.begin(), clusterIndices.end(), [&](auto cluster) {
+		PointMatcher clusterPointMatcher(pointMatcher, cluster.first, cluster.second + 1);
+
+		std::string firstImage = std::filesystem::path(clusterPointMatcher.imgPathList().front()).filename();
+		std::string lastImage = std::filesystem::path(clusterPointMatcher.imgPathList().back()).filename();
+
+		std::cout << std::endl << "Stitching " << cluster.second + 1 - cluster.first << " images, " 
+		                       << firstImage << " to " << lastImage << " ..." << std::endl; 
 
 		std::filesystem::path outputDirectory = 
 			std::filesystem::path(args.outputDirectory) / (
@@ -76,13 +82,21 @@ int main(int argc, char* argv[])
 
 		std::filesystem::create_directories(outputDirectory);
 		ImageAligner imgAligner(clusterPointMatcher, outputDirectory);
-		imgAligner.imageStitcherbyGroup(0);
-		imgAligner.saveMosaicImage(args.resizedFactorForMosaic);
-		imgAligner.saveMosaicImageP();
+
+		try {
+			imgAligner.imageStitcherbyGroup(-1);
+			imgAligner.saveMosaicImage(args.resizedFactorForMosaic);
+		} catch (...) {
+			std::cout << "Stitching images " << firstImage << " to " << lastImage << " failed!" << std::endl; 
+		}
+		auto curr_time = system_clock::now();
+		float secondsUntilNow = (duration_cast<seconds>(curr_time - start_time)).count();
+		float imagesProcessedPerSecond = float(cluster.second + 1) / secondsUntilNow;
+		std::cout << "Currently @ " << std::setprecision(2) << imagesProcessedPerSecond << " images per second\n";
 	});
 		
 	auto end_time = system_clock::now();
-	std::cout << "Stitching took " << (duration_cast<seconds>(end_time - start_time)).count() << " seconds\n";
+	std::cout << "Total stitching time was " << (duration_cast<seconds>(end_time - start_time)).count() << " seconds\n";
 	
 	return 0;
 }

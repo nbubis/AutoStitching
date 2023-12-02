@@ -1,6 +1,6 @@
 #include "util.h"
 #include <filesystem>
-
+#include <cmath>
 
 cv::Mat_<double> Utils::buildCostGraph(const cv::Mat_<int> &similarMat)
 {
@@ -67,8 +67,11 @@ double Utils::calVecDot(cv::Point2d vec1, cv::Point2d vec2)
 
 void Utils::printProgress(float percent) 
 {
-	const int barLength = 30;
-	
-	std::cout << "\r[" << std::string(barLength * percent, '=') << std::string(barLength * (1 - percent), ' ') << "] " << std::fixed <<
-		std::setprecision(1) << std::setw(6) << 100.0f * percent << "%  " << std::flush;          //printing percentage
+	int barLength = 30;
+	int progress = std::min((int)std::ceil(barLength * percent), barLength);
+	std::mutex coutMutex;
+	coutMutex.lock();
+	std::cout << "\r[" << std::string(progress, '=') << std::string(barLength - progress, ' ') << "] " << std::fixed <<
+		std::setprecision(1) << std::setw(6) << 100.0f * percent << "%  " << std::flush;
+	coutMutex.unlock();
 }

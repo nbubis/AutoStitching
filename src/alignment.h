@@ -68,16 +68,12 @@ public:
 	void bundleAdjusting(int sIndex, int eIndex);   //! method 2 : normalize by point
 	void buildIniSolution(double* X, double* initX, int sIndex, int eIndex);
 
-	double CalWarpDeviation(vector<Point2d> pointSet1, vector<Point2d> pointSet2, Mat_<double> cvtMat, vector<double> weightList);
 	//! detect potential overlapping relationships based on the new position (only used in the refinement)
 	void recheckTopology(int sIndex, int eIndex);
 
 	//! display or output functions
 	Rect setImageSize(vector<Point2d> &nodePts);
 	void saveMosaicImage(float resizedWidthForMosaic);         //! aligning in added order
-	void saveMosaicImageP();        //! aligning in image no. order
-	void outputPrecise();
-	void labelGroupNodes();
 
 private:
 	PointMatcher _matcher;
