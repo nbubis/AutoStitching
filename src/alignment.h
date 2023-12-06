@@ -37,14 +37,14 @@ class ImageAligner
 {
 public:
 	ImageAligner(PointMatcher & pointMatcher, bool forceSimilarity, std::string outputDir);
-        
+	void imageStitcherbyGroup(int referNo);
+
+	friend class MosaicCreator;
+	
+private:
 	//*** functions for sorting the topological relationship of images ***//
 	void sortImageOrder(int referNo, bool shallLoad, bool isInorder);
 	void divideImageGroups();
-
-public: 
-	//*** functions for building and optimizing the alignment  ***//
-	void imageStitcherbyGroup(int referNo);
 	void imageStitcherbySolos(int referNo);
 	void fillImageMatchNet();
 	//! initial alignment by affine model
@@ -65,8 +65,7 @@ public:
 	void buildIniSolution(double* X, double* initX, int sIndex, int eIndex);
 
 	//! display or output functions
-	Rect setImageSize(vector<Point2d> &nodePts);
-	void saveMosaicImage(float resizedWidthForMosaic);         //! aligning in added order
+
 
 private:
 	PointMatcher _matcher;
@@ -88,4 +87,5 @@ private:
 	bool _forceSimilarity;
 	static float _penaltyCoeffLM;
 	float _penaltyCoeffBA;
+	int _resizedFactorForMosaic;
 };

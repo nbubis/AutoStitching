@@ -1,6 +1,7 @@
 #include "util.h"
 #include <filesystem>
 #include <cmath>
+#include <cstdlib>
 
 cv::Mat_<double> Utils::buildCostGraph(const cv::Mat_<int> &similarMat)
 {
@@ -54,17 +55,6 @@ void Utils::pointTransform(cv::Mat_<double> homoMat, std::vector<cv::Point2d> &p
 }
 
 
-double Utils::calPointDist(cv::Point2d point1, cv::Point2d point2)
-{
-	return sqrt((point1.x-point2.x)*(point1.x-point2.x) + (point1.y-point2.y)*(point1.y-point2.y));
-}
-
-
-double Utils::calVecDot(cv::Point2d vec1, cv::Point2d vec2)
-{
-	return vec1.x*vec2.x+vec1.y*vec2.y;
-}
-
 void Utils::printProgress(float percent) 
 {
 	int barLength = 30;
@@ -75,3 +65,5 @@ void Utils::printProgress(float percent)
 		std::setprecision(1) << std::setw(6) << 100.0f * percent << "%  " << std::flush;
 	coutMutex.unlock();
 }
+
+

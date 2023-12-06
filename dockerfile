@@ -2,7 +2,7 @@ FROM ubuntu
 
 RUN apt-get update &&\
     apt-get install -y git wget tar cmake g++ apt-utils libblas-dev libopenblas-dev \
-    libopenblas-base libopenblas0 liblapack-dev liblapack3 unzip libtbb-dev
+    libopenblas-base libopenblas0 liblapack-dev liblapack3 unzip libtbb-dev libexiv2-dev
 
 ARG BASE_DIRECTORY=/usr/local/stitching
 

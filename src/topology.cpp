@@ -312,7 +312,7 @@ void TopoFinder::detectPotentialOverlap(int curIndex, vector<Point2d> &pointSet1
 		}
 		Quadra testObj = _projCoordSet[i];
 		double threshold = 0.5*(max(width,height) + max(testObj.imgSize.width, testObj.imgSize.height));
-		double dist = Utils::calPointDist(iniPos, testObj.centroid);
+		double dist = cv::norm(iniPos - testObj.centroid);
 		if (dist > threshold*0.8)
 		{
 			continue;

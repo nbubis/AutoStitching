@@ -68,7 +68,7 @@ void PointMatcher::featureExtractor()
 	_imgSizeList.resize(_imgNum);
 	_descriptors.resize(_imgNum);
 
-	std::cout << "Reading images and extracting features ..." << std::endl;
+	std::cout << std::endl << "Reading images and extracting features ..." << std::endl;
 
 	float percent = 0.0f;
 	std::for_each(std::execution::par_unseq, _imgPathList.begin(), _imgPathList.end(), [&](std::string & imgName) {

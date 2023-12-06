@@ -11,19 +11,22 @@
 #include "featureMatch.h"
 #include "alignment.h"
 #include "util.h"
+#include "mosaic.h"
 #include "opencv2/features2d.hpp"
 #include "opencv2/xfeatures2d.hpp"
 #include <tbb/parallel_for.h>
 
 struct SticherArgs : public argparse::Args {
-    std::string & imageDirectory            = arg("image_directory", "Path to input images to stitch");
-    std::string & outputDirectory           = arg("output_directory", "Path to input images to stitch");
+    std::string  & imageDirectory           = arg("image_directory", "Path to input images to stitch");
+    std::string  & outputDirectory          = arg("output_directory", "Path to input images to stitch");
     unsigned int & imageNumLimit            = kwarg("N,n", "Work on only the first N images").set_default(std::numeric_limits<int>::max());
 	unsigned int & limitImageMatchNum       = kwarg("image_match_num", "Number of images to match for each image").set_default(0);
 	float        & resizedFactorForFeatures = kwarg("feature_downsample", "Factor in which to resize images for feature extraction").set_default(1.0f);
 	float        & resizedFactorForMosaic   = kwarg("mosaic_downsample", "Factor in which to resize images for mosaic creation").set_default(1.0f);
 	bool         & forceSimilarity          = kwarg("force_ortho", "Force images to have equal area, required for long stitches").set_default(false);
+	bool         & blendImages              = kwarg("blend_images", "Blend images, provides smooth mosaic, but may hide problematic stitches").set_default(false);
 };
+
 
 
 int main(int argc, char* argv[])
@@ -85,12 +88,13 @@ int main(int argc, char* argv[])
 
 		ImageAligner imgAligner(clusterPointMatcher, args.forceSimilarity, outputDirectory);
 
-		try {
+		// try {
 			imgAligner.imageStitcherbyGroup(-1);
-			imgAligner.saveMosaicImage(args.resizedFactorForMosaic);
-		} catch (...) {
-			std::cout << "Stitching images " << firstImage << " to " << lastImage << " failed!" << std::endl; 
-		}
+			MosaicCreator mosaicCreator(imgAligner, args.resizedFactorForMosaic, args.blendImages);
+			mosaicCreator.saveMosaicImage(outputDirectory.string() + "/mosaic.tiff");
+		// } catch (...) {
+		// 	std::cout << "Stitching images " << firstImage << " to " << lastImage << " failed!" << std::endl; 
+		// }
 		auto curr_time = system_clock::now();
 		float secondsUntilNow = (duration_cast<seconds>(curr_time - start_time)).count();
 		float imagesProcessedPerSecond = float(cluster.second + 1) / secondsUntilNow;

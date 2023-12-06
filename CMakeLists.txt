@@ -18,6 +18,8 @@ endif(OPENMP_FOUND)
 find_package(LAPACK REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(BLAS REQUIRED)
+find_package(exiv2 REQUIRED)
+ 
 include_directories(${CMAKE_SOURCE_DIR}/argparse/ ${CMAKE_SOURCE_DIR}/../levmar-2.6/ /usr/include/tbb/)
 include_directories(${CMAKE_SOURCE_DIR} ${OPENCV_INCLUDE_DIR} ${LAPACK_INCLUDE_DIRS} ${BLAS_INCLUDE_DIRS} )
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)

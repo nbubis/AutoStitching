@@ -2,6 +2,8 @@
 #include <omp.h>
 #include <numeric>
 #include <execution>
+#include <opencv2/stitching/detail/blenders.hpp>
+#include <exiv2/exiv2.hpp>
 
 float ImageAligner::_penaltyCoeffLM = 0.1;
 
@@ -14,7 +16,7 @@ ImageAligner::ImageAligner(PointMatcher & pointMatcher, bool forceSimilarity, st
 	_refImgNo = 0;
 	_outputDir = outputDir;
 	if (forceSimilarity) {
-		_penaltyCoeffBA = 0.1;
+		_penaltyCoeffBA = 0.10;
 	} else {
 		_penaltyCoeffBA = 0.01;
 	}
@@ -117,7 +119,7 @@ void ImageAligner::imageStitcherbySolos(int referNo)
 	//! =============== build match net ===============
 	fillImageMatchNet();
 
-	cout<<"#Sequential image alignment start ..."<<endl;
+	cout << "#Sequential image alignment start ..."<< endl;
 	Mat_<double> identMatrix = Mat::eye(3,3,CV_64FC1);     //cvtMatrix of reference image
 	_alignModelList.push_back(identMatrix);
 	_initModelList.push_back(identMatrix);
@@ -876,7 +878,7 @@ void ImageAligner::bundleAdjustingA(int sIndex, int eIndex)
 
 void ImageAligner::bundleAdjustinga(int sIndex, int eIndex)
 {
-	cout<<"Bundle adjusting ...("<<eIndex-sIndex+1<<" images)"<<endl;
+	std::cout << "Bundle adjusting ..." << std::endl;
 	int measureNum = 0;
 	for (int i = sIndex; i <= eIndex; i ++)
 	{
@@ -902,6 +904,7 @@ void ImageAligner::bundleAdjustinga(int sIndex, int eIndex)
 	int max_iters = 20;
 
 	int rn = 0, ite = 0;
+	bool converged = false;
 	while (1)
 	{
 		double meanBias = 0;
@@ -1081,11 +1084,20 @@ void ImageAligner::bundleAdjustinga(int sIndex, int eIndex)
 		}	
 		if (ite++ == max_iters)
 		{
-			if (meanBias > 3.0) {
-				throw std::logic_error("Bundle adjustment diverged!");
-			} 
+			// if (meanBias > 3.0) {
+			// 	throw std::logic_error("Bundle adjustment diverged!");
+			// } 
 			break;
 		}
+		converged = true;
+	}
+
+	delete []X;
+	delete []initX;
+	
+	if (!converged) 
+	{
+		return;
 	}
 	//! update the optimized parameters
 	int cnt = 0;
@@ -1097,8 +1109,7 @@ void ImageAligner::bundleAdjustinga(int sIndex, int eIndex)
 			data[j] = X[cnt++];
 		}
 	}
-	delete []X;
-	delete []initX;
+
 	// cout<<"This optimization round is over!"<<endl;
 }
 
@@ -1206,8 +1217,13 @@ void ImageAligner::OptimizationFunction(double* X, double* d, int m, int n, void
 	vector<TreeNode> visitOrder = dataPtr->visitOrder;
 	int cnt = 0;
 	double meanError = 0;
-	for (int i = startIndex; i <= endIndex; i ++)       //without the start image
-	{
+
+	std::vector<int> ivec(endIndex - startIndex + 1);
+  	std::iota(ivec.begin(), ivec.end(), startIndex);
+
+	std::for_each(std::execution::par_unseq, ivec.begin(), ivec.end(), [&](auto i) {
+	// for (int i = startIndex; i <= endIndex; i ++)       //without the start image
+	// {
 		int curNo = visitOrder[i].imgNo;
 		Match_Net matchNet = (*matchNetPtr)[curNo];
 		vector<int> relatedImgs = matchNet.relatedImgs;
@@ -1215,6 +1231,7 @@ void ImageAligner::OptimizationFunction(double* X, double* d, int m, int n, void
 		double *iniHomoVec1, *iniHomoVec2;
 		homoVec1 = X + 8*(i-startIndex);
 		iniHomoVec1 = (double*)(*modelListPtr)[i].data;
+
 		for (int j = 0; j < relatedImgs.size(); j ++)
 		{
 			int neigIndex = relatedImgs[j];
@@ -1279,7 +1296,7 @@ void ImageAligner::OptimizationFunction(double* X, double* d, int m, int n, void
 				meanError += bias;
 			}
 		}
-	}
+	});
 	meanError /= cnt;
 	// cout<<"current mean-warping-bias is: "<<meanError<<endl;
 }
@@ -1299,139 +1316,3 @@ int ImageAligner::findVisitIndex(int imgNo)
 }
 
 
-void ImageAligner::saveMosaicImage(float resizedFactorForMosaic)
-{
-	std::cout << "Warping images ..." << std::endl;
-
-	std::vector<std::vector<cv::Point2d>> warpedCorners(_imgNum);
-	std::vector<cv::Point2d> warpedCornersAll;
-
-	std::vector<cv::Mat> scaledHomography(_imgNum);
-	for (int i = 0; i < _imgNum; i++) 
-	{
-		cv::Mat homography = _alignModelList[findVisitIndex(i)].clone();
-		homography.row(0) = homography.row(0) / resizedFactorForMosaic;
-		homography.row(1) = homography.row(1) / resizedFactorForMosaic;
-		scaledHomography[i] = homography;
-    };
-
-	for (int i = 0; i < _imgNum; i++)
-	{
-		std::vector<cv::Point2d> imageCorners{
-			{0.0, 0.0}, {_imgSizeList[i].width - 1.0, 0.0}, 
-			{_imgSizeList[i].width - 1.0, _imgSizeList[i].height - 1.0}, {0.0, _imgSizeList[i].height - 1.0}};
-
-		cv::perspectiveTransform(imageCorners, warpedCorners[i], scaledHomography[i]);
-		warpedCornersAll.insert(std::end(warpedCornersAll), std::begin(warpedCorners[i]), std::end(warpedCorners[i]));
-	}
-
-	auto minmaxX = std::minmax_element(warpedCornersAll.begin(), warpedCornersAll.end(), 
-		[](auto a, auto b){ return a.x < b.x; });
-	auto minmaxY = std::minmax_element(warpedCornersAll.begin(), warpedCornersAll.end(), 
-		[](auto a, auto b){ return a.y < b.y; });
-
-	double xMosaicBias = -1.0 * minmaxX.first->x;
-	double yMosaicBias = -1.0 * minmaxY.first->y;
-
-	int mosaicColNum = minmaxX.second->x - minmaxX.first->x;
-	int mosaicRowNum = minmaxY.second->y - minmaxY.first->y;
-
-	cv::Mat mosaicImage = cv::Mat(mosaicRowNum, mosaicColNum, CV_8UC4, Scalar(0, 0, 0, 0));
-
-	std::mutex mosaicMutex;
-
-	std::vector<int> imageRange(_imgNum);
-	std::iota(imageRange.begin(), imageRange.end(), 0);
-
-	float percent = 0.0;
-	std::for_each(std::execution::par_unseq, imageRange.begin(), imageRange.end(), [&](auto i) {
-
-		auto imageMinmaxX = std::minmax_element(warpedCorners[i].begin(), warpedCorners[i].end(), 
-			[](auto a, auto b){ return a.x < b.x; });
-		auto imageMinmaxY = std::minmax_element(warpedCorners[i].begin(), warpedCorners[i].end(), 
-			[](auto a, auto b){ return a.y < b.y; });
-
-		int imageColNum = imageMinmaxX.second->x - imageMinmaxX.first->x;
-		int imageRowNum = imageMinmaxY.second->y - imageMinmaxY.first->y;
-
-		cv::Mat warpedImage = cv::Mat(imageRowNum, imageColNum, CV_8UC4, Scalar(0, 0, 0, 0));
-
-		cv::Mat image = cv::imread(_filePathList[i]);	
-		cv::Mat biasedHomography = scaledHomography[i].clone();
-		biasedHomography.row(0) += -1.0 * imageMinmaxX.first->x * biasedHomography.row(2);
-		biasedHomography.row(1) += -1.0 * imageMinmaxY.first->y * biasedHomography.row(2);
-
-		cv::cvtColor(image, image, COLOR_BGR2BGRA);
-		cv::warpPerspective(image, warpedImage, biasedHomography, warpedImage.size(), cv::InterpolationFlags::INTER_LINEAR, cv::BorderTypes::BORDER_TRANSPARENT);
-
-		cv::Rect copyToRect(std::max(xMosaicBias + imageMinmaxX.first->x, 0.0), 
-		                    std::max(yMosaicBias + imageMinmaxY.first->y, 0.0), 
-			                std::min(warpedImage.cols, mosaicImage.cols), 
-							std::min(warpedImage.rows, mosaicImage.rows));
-
-		Mat ch;
-		cv::extractChannel(warpedImage, ch, 3);
-		mosaicMutex.lock();
-		warpedImage.copyTo(mosaicImage(copyToRect), ch > 0);
-		mosaicMutex.unlock();
-		percent += 1.0f / (float)_imgNum;
-		Utils::printProgress(percent); 
-	});
-
-	cv::imwrite(_outputDir  + "/mosaic.png", mosaicImage);
-
-	std::cout << std::endl;
-}
-
-
-Rect ImageAligner::setImageSize(vector<Point2d> &nodePts)
-{
-	vector<Point2d> marginPtList;
-	int i, j;
-	for (i = 0; i < _imgNum; i ++)
-	{
-		Mat_<double> homoMat = _alignModelList[i];
-		int curImgNo = _visitOrder[i].imgNo;
-		Size imgSize = _imgSizeList[curImgNo];
-		int height = imgSize.height, width = imgSize.width;
-		Point2d srcPt00(0,0), srcPt01(width,0), srcPt10(0,height), srcPt11(width,height);
-		Point2d dstPt00, dstPt01, dstPt10, dstPt11;
-		Utils::pointTransform(homoMat, srcPt00, dstPt00);
-		Utils::pointTransform(homoMat, srcPt01, dstPt01);
-		Utils::pointTransform(homoMat, srcPt10, dstPt10);
-		Utils::pointTransform(homoMat, srcPt11, dstPt11);
-		marginPtList.push_back(dstPt00);
-		marginPtList.push_back(dstPt01);
-		marginPtList.push_back(dstPt10);
-		marginPtList.push_back(dstPt11);
-		if (i != 0)
-		{
-			nodePts.push_back(dstPt10);
-			nodePts.push_back(dstPt11);
-		}
-	}
-	int minX = 999, minY = 999, maxX = 0, maxY = 0;
-	for (i = 0; i < marginPtList.size(); i ++)
-	{
-		Point2d tmpPt = marginPtList[i];
-		int x = int(fabs(tmpPt.x)+1)*(tmpPt.x < 0 ? -1 : 1);
-		int y = int(fabs(tmpPt.y)+1)*(tmpPt.y < 0 ? -1 : 1);
-		if (x > maxX)
-			maxX = x;
-		if (x < minX)
-			minX = x;
-		if (y > maxY)
-			maxY = y;
-		if (y < minY)
-			minY = y;
-	}
-	for (i = 0; i < nodePts.size(); i ++)
-	{
-		nodePts[i].x -= minX;
-		nodePts[i].y -= minY;
-	}
-	Rect mosaicRect;
-	mosaicRect.x = minX; mosaicRect.y = minY;
-	mosaicRect.width = maxX-minX+1; mosaicRect.height = maxY-minY+1;
-	return mosaicRect;
-}
